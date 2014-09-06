@@ -48,9 +48,6 @@ EXTRADIST = @@EXTRADIST@@ Makefile
 
 SPECIAL=$(EXTRADIST) .depend Makefile.am
 
-fast_emul.ml: fast_emul.cpp
-	$(CPP) fast_emul.cpp fast_emul.ml
-
 all: 	depend Makefile 
 	@make $(PRGM)
 
@@ -95,6 +92,9 @@ compile_info.ml: Makefile
 
 %.o : %.c
 	$(CC) $(CFLAGS) -I$(CAMLLIBPATH)/caml -c $<
+
+%.ml : %.cpp
+	$(CPP) $< $@
 
 clean:
 	rm -f $(CMI) $(CMX) $(CMX:.cmx=.o) $(OBJS) $(PRGM) $(PRGM).opt $(PRGM).ps ocamldoc.out $(SPECML) $(SPECMLI) parser.output compile_info.ml .depend *~
