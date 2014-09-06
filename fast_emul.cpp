@@ -200,12 +200,6 @@ module Make(Code:Code) : Emulator =
       and mask_imm = Int32.of_int 0xffff 
       and mask_rel = Int32.of_int 0x1fffff
       and mask_abs = Int32.of_int 0x3ffffff in
-(*
-  let mask_sign_imm = Int32.of_int 0x8000 
-  and ext_sign_imm = Int32.shift_left (Int32.of_int 0xffff) 16 
-  and mask_sign_rel = Int32.of_int 0x100000 
-  and ext_sign_rel = Int32.shift_left (Int32.of_int 0x7ff) 21 in
-*)
       let iadd a b = Int32.add a b 
       and isub a b = Int32.sub a b 
       and imul a b = Int32.mul a b
@@ -224,56 +218,6 @@ module Make(Code:Code) : Emulator =
 	let b = Int32.to_int b in
 	  if b < 0 then Int32.shift_right a ((-b) land 0x1f)
 	  else Int32.shift_left a (b land 0x1f)
-      in
-      let int_op iop = function
-	| R ->
-	    (function n ->
-	       let c = Int32.logand n mask_reg in
-	       let n = Int32.shift_right_logical n 16 in
-	       let b = Int32.logand n mask_reg in
-	       let n = Int32.shift_right_logical n 5 in
-	       let a = Int32.logand n mask_reg in
-		 register_set a (iop (register_get b) (register_get c));
-		 pc := Int32.add (!pc) four)
-	| I ->
-	    (function n ->
-	       let c = Int32.logand n mask_imm in
-		 (* let c = if int32_compare (Int32.logand c mask_sign_imm) Int32.zero <> 0 then Int32.logor c ext_sign_imm else c in *)
-	       let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *)
-	       let n = Int32.shift_right_logical n 16 in
-	       let b = Int32.logand n mask_reg in
-	       let n = Int32.shift_right_logical n 5 in
-	       let a = Int32.logand n mask_reg in
-		 register_set a (iop (register_get b) c);
-		 pc := Int32.add (!pc) four)
-	| IU ->
-	    (function n ->
-	       let c = Int32.logand n mask_imm in
-	       let n = Int32.shift_right_logical n 16 in
-	       let b = Int32.logand n mask_reg in
-	       let n = Int32.shift_right_logical n 5 in
-	       let a = Int32.logand n mask_reg in
-		 register_set a (iop (register_get b) c);
-		 pc := Int32.add (!pc) four)
-      and test_op iop =
-	(fun n ->
-	   let c = Int32.logand n mask_rel in
-	     (* let c = if int32_compare (Int32.logand c mask_sign_rel) Int32.zero <> 0 then Int32.logor c ext_sign_rel else c in *)
-	   let c = Int32.shift_right (Int32.shift_left c 11) 11 in (* 11 = 32 - 21 *)
-	   let n = Int32.shift_right_logical n 21 in
-	   let a = Int32.logand n mask_reg in
-	     pc := Int32.add (Int32.mul (iop (register_get a) c) four) (!pc))
-      and mem_op iop = 
-	(fun n ->
-	   let c = Int32.logand mask_imm n in
-	     (* let c = if int32_compare (Int32.logand c mask_sign_imm) Int32.zero <> 0 then Int32.logor c ext_sign_imm else c in *)
-	   let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *)
-	   let n = Int32.shift_right_logical n 16 in
-	   let b = Int32.logand mask_reg n in
-	   let n = Int32.shift_right_logical n 5 in
-	   let a = Int32.logand mask_reg n in
-	     iop a b c;
-	     pc := Int32.add (!pc) four)
       in
 	for i = 0 to size - 1 do
 	  try
@@ -319,7 +263,6 @@ module Make(Code:Code) : Emulator =
 		       | I ->
 			   (function n ->
 			      let c = Int32.logand n mask_imm in
-				(* let c = if int32_compare (Int32.logand c mask_sign_imm) Int32.zero <> 0 then Int32.logor c ext_sign_imm else c in *)
 			      let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *)
 			      let n = Int32.shift_right_logical n 21 in
 			      let a = Int32.logand n mask_reg in
@@ -341,7 +284,6 @@ module Make(Code:Code) : Emulator =
 		| Bsr ->
 		    (fun n ->
 		       let c = Int32.logand n mask_rel in
-			 (* let c = if int32_compare (Int32.logand c mask_sign_rel) Int32.zero <> 0 then Int32.logor c ext_sign_rel else c in *)
 		       let c = Int32.shift_right (Int32.shift_left c 11) 11 in (* 11 = 32 - 21 *)
 			 register_set thirty_one (Int32.add (!pc) four);
 			 pc := Int32.add (!pc) (Int32.mul c four))
@@ -378,6 +320,7 @@ module Make(Code:Code) : Emulator =
       let round n = align (n + 3) in
       let hp_address = ref 0 and hp_size = ref 0 and sp = ref 0 in
       let init hp sz reg =
+	let hp = Int32.to_int hp and sz = Int32.to_int sz and reg = Int32.to_int reg in
 	if (hp < 0) || (hp >= mem_size) then
 	  failwith ("out of bounds heap start: "^(string_of_int hp))
 	else if (hp + sz - 1 >= mem_size) then
@@ -402,53 +345,55 @@ module Make(Code:Code) : Emulator =
 	      prerr_newline()
 	    end
       and alloc sz =
+	let sz = Int32.to_int sz in
 	if (sz < 0) then failwith ("negative block size: "^(string_of_int sz));
 	let sz = max 4 (round sz) in
 	let addr = !hp_address in
 	  hp_address := !hp_address + sz;
-	  addr
+	  Int32.of_int addr
       in init,alloc
 
     let exec () = 
-      while true do
-	(* prerr_string "PC: ";prerr_string (Int32.to_string (!pc));prerr_newline(); *)
-	try
-	  let n = read_word (!pc) in
-	  let opcode = (Int32.to_int (Int32.shift_right_logical n 26)) land 0x3f in
-	    get_op_table.(opcode) (n)
-	with Error(Syscall(a,b,c)) ->
-	  (match Risc.syscall_of_int c with
-	     | Some(syscall) -> 
-		 (match syscall with
-		    | Risc.Sys_exit -> raise (Error(Exit(register_get a)))
-		    | Risc.Sys_io_wr_chr ->
-			Pervasives.output_char stdout (Char.chr ((Int32.to_int (register_get a)) land 0xff));
-		    | Risc.Sys_io_wr_int ->
-			Pervasives.output_string stdout (Int32.to_string (register_get a))
-		    | Risc.Sys_io_flush ->
-			Pervasives.flush stdout
-		    | Risc.Sys_io_rd_chr ->
-			let n = 
-			  try Pervasives.input_byte stdin
-			  with End_of_file -> -1
-			in
-			  register_set a (Int32.of_int n)
-		    | Risc.Sys_io_rd_int ->
-			register_set a (Int32.of_string (Pervasives.input_line stdin));
-		    | Risc.Sys_get_total_mem_size ->
-			register_set a (Int32.of_int mem_size)
-		    | Risc.Sys_gc_init -> 
-			let ra = Int32.to_int (register_get a) 
-			and rb = register_get b in
-			let sz = Int32.to_int (Int32.logand rb (Int32.of_int 0x1ffffff)) 
-			and sp = Int32.to_int (Int32.shift_right_logical rb 27) in
-			  gc_init ra (4*sz) sp
-		    | Risc.Sys_gc_alloc -> 
-			let sz = Int32.to_int (register_get b) in
-			  register_set a (Int32.of_int (gc_alloc sz))
-		    | _ -> failwith "syscall not yet implemented"
-		 );
-		 pc := Int32.add four (!pc)
-	     | None -> raise (Error(Illegal)))
-      done
-end
+      let mask_sz = Int32.of_int 0x1ffffff in
+	while true do
+	  (* prerr_string "PC: ";prerr_string (Int32.to_string (!pc));prerr_newline(); *)
+	  try
+	    let n = read_word (!pc) in
+	    let opcode = (Int32.to_int (Int32.shift_right_logical n 26)) land 0x3f in
+	      get_op_table.(opcode) (n)
+	  with Error(Syscall(a,b,c)) ->
+	    (match Risc.syscall_of_int c with
+	       | Some(syscall) -> 
+		   (match syscall with
+		      | Risc.Sys_exit -> raise (Error(Exit(register_get a)))
+		      | Risc.Sys_io_wr_chr ->
+			  Pervasives.output_char stdout (Char.chr ((Int32.to_int (register_get a)) land 0xff));
+		      | Risc.Sys_io_wr_int ->
+			  Pervasives.output_string stdout (Int32.to_string (register_get a))
+		      | Risc.Sys_io_flush ->
+			  Pervasives.flush stdout
+		      | Risc.Sys_io_rd_chr ->
+			  let n = 
+			    try Pervasives.input_byte stdin
+			    with End_of_file -> -1
+			  in
+			    register_set a (Int32.of_int n)
+		      | Risc.Sys_io_rd_int ->
+			  register_set a (Int32.of_string (Pervasives.input_line stdin));
+		      | Risc.Sys_get_total_mem_size ->
+			  register_set a mem_size_int32
+		      | Risc.Sys_gc_init -> 
+			  let ra = register_get a
+			  and rb = register_get b in
+			  let sz = Int32.shift_left (Int32.logand rb mask_sz) 2
+			  and sp = Int32.shift_right_logical rb 27 in
+			    gc_init ra sz sp
+		      | Risc.Sys_gc_alloc -> 
+			  let sz = register_get b in
+			    register_set a (gc_alloc sz)
+		      | _ -> failwith "syscall not yet implemented"
+		   );
+		   pc := Int32.add four (!pc)
+	       | None -> raise (Error(Illegal)))
+	done
+  end
