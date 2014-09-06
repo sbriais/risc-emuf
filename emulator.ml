@@ -30,6 +30,19 @@ module CellSet = Set.Make(struct
 			      Pervasives.compare cx.address cy.address
 			  end)
 
+let array_create n =
+  let res = Array1.create int32 c_layout n in
+    for i = 0 to n - 1 do
+      res.{i} <- Int32.zero
+    done;
+    res
+
+let array_get t i =
+  t.{i}
+
+let array_set t i v =
+  t.{i} <- v
+
 class gc = 
   let align n = n land 0x7ffffffc in
   let round n = align (n + 3) in
@@ -70,16 +83,26 @@ object(self)
 	end;
       alive_cells <- CellSet.empty;
       dead_cells <- CellSet.singleton (new_cell hp_address hp_size false)
+(*
   method alloc sz emu =
-    match self#lock sz with
-      | Some(c) -> self#zero c emu; c.address
-      | None -> 
-	  begin
-	    self#free emu;
+    if (sz < 0) then failwith ("negative block size: "^(string_of_int sz));
+    let sz = max 4 (round sz) in
+    let addr = hp_address in
+      hp_address <- hp_address + sz;
+      addr
+*)
+  method alloc sz emu =
+    if (sz < 0) then failwith ("negative block size: "^(string_of_int sz));
+    let sz = max 4 (round sz) in
+      match self#lock sz with
+	| Some(c) -> self#zero c emu; c.address
+	| None -> 
+	    begin
+	      self#free emu;
 	    match self#lock sz with
 	      | Some(c) -> self#zero c emu; c.address
 	      | None -> failwith ("could not allocate block of "^(string_of_int sz)^" bytes")
-	  end
+	    end
   method private zero c emu =
     for i = 0 to (c.size / 4) - 1 do
       emu#writeWord (c.address+4*i) (Int32.zero)
@@ -147,8 +170,6 @@ object(self)
 		prerr_newline()
 	      end
   method private lock sz =
-    if (sz < 0) then failwith ("negative block size: "^(string_of_int sz));
-    let sz = max 4 (round sz) in
     let cell,last = CellSet.fold 
 		 (fun c (cell,last) ->
 		    match cell with
@@ -203,11 +224,14 @@ object(self)
 end
 and emulator = 
   let create_memory mem_size = 
+    array_create mem_size 
+(*
     let mem = Array1.create int32 c_layout mem_size in
       for i = 0 to mem_size - 1 do
 	mem.{i} <- Int32.zero
       done;
       mem
+*)
   in
   let int_op_of_arith_op = function
     | Add -> Int32.add
@@ -247,13 +271,13 @@ object(self)
   method private init =
     code#iter 
       (fun i instr ->
-	 memory.{i} <- Codec.code_instruction instr)
+	 array_set memory i (Codec.code_instruction instr))
   method getMemSize = 4 * mem_size
   method readWord adr =
     if adr land 0x3 <> 0 then raise (Error(BusError(adr)))
     else
       try
-	memory.{adr lsr 2}
+	array_get memory (adr lsr 2)
       with Invalid_argument(_) -> raise (Error(BusError(adr)))
   method readByte adr =
     let b = self#readWord ((adr lsr 2) lsl 2) in
@@ -263,7 +287,7 @@ object(self)
     if adr land 0x3 <> 0 then raise (Error(BusError(adr)))
     else
       try
-	memory.{adr lsr 2} <- w
+	array_set memory (adr lsr 2) w
       with Invalid_argument(_) -> raise (Error(BusError(adr)))
   method writeByte adr b =
     let w = self#readWord ((adr lsr 2) lsl 2) in

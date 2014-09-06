@@ -192,7 +192,9 @@ object(self)
       let Some(instr) = code.(i) in
 	f i instr
     done
-  method size = pc
+  method fetch i =
+    let Some(instr) = code.(i / 4) in instr
+  method getSize = pc
   method getLabel name =
     if (name = "pc") || (name = "PC") then 
       freeze pc
