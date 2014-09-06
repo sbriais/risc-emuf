@@ -203,8 +203,7 @@ module Make(Code:Code) : Emulator =
 	       let a = Int32.logand n mask_reg in
 		 register_set a (iop (register_get b) c);
 		 pc := Int32.add (!pc) four)
-      in 
-      let test_op iop =
+      and test_op iop =
 	(fun n ->
 	   let c = Int32.logand n mask_rel in
 	     (* let c = if int32_compare (Int32.logand c mask_sign_rel) Int32.zero <> 0 then Int32.logor c ext_sign_rel else c in *)
@@ -212,6 +211,17 @@ module Make(Code:Code) : Emulator =
 	   let n = Int32.shift_right_logical n 21 in
 	   let a = Int32.logand n mask_reg in
 	     pc := Int32.add (Int32.mul (iop (register_get a) c) four) (!pc))
+      and mem_op iop = 
+	(fun n ->
+	   let c = Int32.logand mask_imm n in
+	     (* let c = if int32_compare (Int32.logand c mask_sign_imm) Int32.zero <> 0 then Int32.logor c ext_sign_imm else c in *)
+	   let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *)
+	   let n = Int32.shift_right_logical n 16 in
+	   let b = Int32.logand mask_reg n in
+	   let n = Int32.shift_right_logical n 5 in
+	   let a = Int32.logand mask_reg n in
+	     iop a b c;
+	     pc := Int32.add (!pc) four)
       in
 	for i = 0 to size - 1 do
 	  try
