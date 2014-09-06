@@ -16,7 +16,7 @@ type mem_op = Ldw | Ldb | Stw | Stb | Pop | Psh
 type test_op = Beq | Bne | Blt | Bge | Bgt | Ble
 
 type syscall = 
-    Sys_io_rd_chr
+  | Sys_io_rd_chr
   | Sys_io_rd_int
   | Sys_io_wr_chr
   | Sys_io_wr_int
