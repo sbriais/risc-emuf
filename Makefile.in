@@ -48,6 +48,9 @@ EXTRADIST = @@EXTRADIST@@ Makefile
 
 SPECIAL=$(EXTRADIST) .depend Makefile.am
 
+fast_emul.ml: fast_emul.cpp
+	$(CPP) fast_emul.cpp fast_emul.ml
+
 all: 	depend Makefile 
 	@make $(PRGM)
 

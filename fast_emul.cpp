@@ -1,13 +1,13 @@
 (*
 
-#define INTOP(iop) \
+#define INTOP(op) \
   (match mode with | R -> (function n -> \
   let c = Int32.logand n mask_reg in \
   let n = Int32.shift_right_logical n 16 in \
   let b = Int32.logand n mask_reg in \
   let n = Int32.shift_right_logical n 5 in \
   let a = Int32.logand n mask_reg in \
-  register_set a (iop (register_get b) (register_get c)); \
+  register_set a (op (register_get b) (register_get c)); \
   pc := Int32.add (!pc) four) \
   | I -> \
   (function n -> \
@@ -17,7 +17,7 @@
   let b = Int32.logand n mask_reg in \
   let n = Int32.shift_right_logical n 5 in \
   let a = Int32.logand n mask_reg in \
-  register_set a (iop (register_get b) c); \
+  register_set a (op (register_get b) c); \
   pc := Int32.add (!pc) four) \
   | IU -> \
   (function n -> \
@@ -26,8 +26,27 @@
   let b = Int32.logand n mask_reg in \
   let n = Int32.shift_right_logical n 5 in \
   let a = Int32.logand n mask_reg in \
-  register_set a (iop (register_get b) c); \
+  register_set a (op (register_get b) c); \
   pc := Int32.add (!pc) four))
+
+#define MEMOP(op) \
+  (fun n -> \
+   let c = Int32.logand mask_imm n in \
+   let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *) \
+   let n = Int32.shift_right_logical n 16 in \
+   let b = Int32.logand mask_reg n in \
+   let n = Int32.shift_right_logical n 5 in \
+   let a = Int32.logand mask_reg n in \
+   op; \
+   pc := Int32.add (!pc) four) 
+
+#define TESTOP(op) \
+  (fun n -> \
+  let c = Int32.logand n mask_rel in \
+  let c = Int32.shift_right (Int32.shift_left c 11) 11 in (* 11 = 32 - 21 *) \
+  let n = Int32.shift_right_logical n 21 in \
+  let a = Int32.logand n mask_reg in \
+  pc := Int32.add (Int32.mul op four) (!pc))
 
 *)
 
@@ -261,10 +280,10 @@ module Make(Code:Code) : Emulator =
 	    let (_,op,mode) = List.find (fun (x,_,_) -> x = i) instrs in
 	      ops.(i) <-
 	      match op with
-		| Add -> INTOP(iadd) 
+		| Add -> INTOP(iadd)
 		| Sub -> INTOP(isub)
 		| Mul -> INTOP(imul)
-		| Div -> INTOP(idiv) 
+		| Div -> INTOP(idiv)
 		| Cmp -> INTOP(icmp)
 		| Mod -> INTOP(imod)
 		| And -> INTOP(iand)
@@ -273,80 +292,18 @@ module Make(Code:Code) : Emulator =
 		| Bic -> INTOP(ibic)
 		| Lsh -> INTOP(ilsh)
 		| Ash -> INTOP(iash)
-		| Ldw -> 
-		    (function n ->
-		       let c = Int32.logand mask_imm n in
-			 (* let c = if int32_compare (Int32.logand c mask_sign_imm) Int32.zero <> 0 then Int32.logor c ext_sign_imm else c in *)
-		       let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *)
-		       let n = Int32.shift_right_logical n 16 in
-		       let b = Int32.logand mask_reg n in
-		       let n = Int32.shift_right_logical n 5 in
-		       let a = Int32.logand mask_reg n in
-			 register_set a (read_word (Int32.add (register_get b) c));
-			 pc := Int32.add (!pc) four)
-		| Ldb -> 
-		    (function n ->
-		       let c = Int32.logand mask_imm n in
-			 (* let c = if int32_compare (Int32.logand c mask_sign_imm) Int32.zero <> 0 then Int32.logor c ext_sign_imm else c in *)
-		       let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *)
-		       let n = Int32.shift_right_logical n 16 in
-		       let b = Int32.logand mask_reg n in
-		       let n = Int32.shift_right_logical n 5 in
-		       let a = Int32.logand mask_reg n in
-			 register_set a (read_byte (Int32.add (register_get b) c));
-			 pc := Int32.add (!pc) four)
-		| Stw -> 
-		    (function n ->
-		       let c = Int32.logand mask_imm n in
-			 (* let c = if int32_compare (Int32.logand c mask_sign_imm) Int32.zero <> 0 then Int32.logor c ext_sign_imm else c in *)
-		       let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *)
-		       let n = Int32.shift_right_logical n 16 in
-		       let b = Int32.logand mask_reg n in
-		       let n = Int32.shift_right_logical n 5 in
-		       let a = Int32.logand mask_reg n in
-			 write_word (Int32.add (register_get b) c) (register_get a);
-			 pc := Int32.add (!pc) four)
-		| Stb -> 
-		    (function n ->
-		       let c = Int32.logand mask_imm n in
-			 (* let c = if int32_compare (Int32.logand c mask_sign_imm) Int32.zero <> 0 then Int32.logor c ext_sign_imm else c in *)
-		       let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *)
-		       let n = Int32.shift_right_logical n 16 in
-		       let b = Int32.logand mask_reg n in
-		       let n = Int32.shift_right_logical n 5 in
-		       let a = Int32.logand mask_reg n in
-			 write_byte (Int32.add (register_get b) c) (register_get a);
-			 pc := Int32.add (!pc) four)
-		| Pop ->
-		    (function n ->
-		       let c = Int32.logand mask_imm n in
-			 (* let c = if int32_compare (Int32.logand c mask_sign_imm) Int32.zero <> 0 then Int32.logor c ext_sign_imm else c in *)
-		       let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *)
-		       let n = Int32.shift_right_logical n 16 in
-		       let b = Int32.logand mask_reg n in
-		       let n = Int32.shift_right_logical n 5 in
-		       let a = Int32.logand mask_reg n in
-			 register_set a (read_word (register_get b));
-			 register_set b (Int32.add (register_get b) c);
-			 pc := Int32.add (!pc) four)
-		| Psh -> 
-		    (function n ->
-		       let c = Int32.logand mask_imm n in
-			 (* let c = if int32_compare (Int32.logand c mask_sign_imm) Int32.zero <> 0 then Int32.logor c ext_sign_imm else c in *)
-		       let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *)
-		       let n = Int32.shift_right_logical n 16 in
-		       let b = Int32.logand mask_reg n in
-		       let n = Int32.shift_right_logical n 5 in
-		       let a = Int32.logand mask_reg n in
-			 register_set b (Int32.sub (register_get b) c);
-			 write_word (register_get b) (register_get a);
-			 pc := Int32.add (!pc) four)
-		| Beq -> test_op (fun v dep -> if int32_compare v Int32.zero = 0 then dep else Int32.one)
-		| Bne -> test_op (fun v dep -> if int32_compare v Int32.zero <> 0 then dep else Int32.one)
-		| Blt -> test_op (fun v dep -> if int32_compare v Int32.zero < 0 then dep else Int32.one)
-		| Bge -> test_op (fun v dep -> if int32_compare v Int32.zero >= 0 then dep else Int32.one)
-		| Bgt -> test_op (fun v dep -> if int32_compare v Int32.zero > 0 then dep else Int32.one)
-		| Ble -> test_op (fun v dep -> if int32_compare v Int32.zero <= 0 then dep else Int32.one)
+		| Ldw -> MEMOP(register_set a (read_word (Int32.add (register_get b) c)))
+		| Ldb -> MEMOP(register_set a (read_byte (Int32.add (register_get b) c)))
+		| Stw -> MEMOP(write_word (Int32.add (register_get b) c) (register_get a))
+		| Stb -> MEMOP(write_byte (Int32.add (register_get b) c) (register_get a))
+		| Pop -> MEMOP(register_set a (read_word (register_get b));register_set b (Int32.add (register_get b) c))
+		| Psh -> MEMOP(register_set b (Int32.sub (register_get b) c);write_word (register_get b) (register_get a))
+		| Beq -> TESTOP((if int32_compare (register_get a) Int32.zero = 0 then c else Int32.one))
+		| Bne -> TESTOP((if int32_compare (register_get a) Int32.zero <> 0 then c else Int32.one))
+		| Blt -> TESTOP((if int32_compare (register_get a) Int32.zero < 0 then c else Int32.one))
+		| Bge -> TESTOP((if int32_compare (register_get a) Int32.zero >= 0 then c else Int32.one))
+		| Bgt -> TESTOP((if int32_compare (register_get a) Int32.zero > 0 then c else Int32.one))
+		| Ble -> TESTOP((if int32_compare (register_get a) Int32.zero <= 0 then c else Int32.one))
 		| Chk -> 
 		    (match mode with
 		       | R ->
