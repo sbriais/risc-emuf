@@ -104,17 +104,19 @@ module Make(Code:Code) : Emulator =
     let registers = Array.create 32 0l
 		      
     let register_get i = 
+      assert(0 <= (Int32.to_int i) && (Int32.to_int i) <= 31);
       DEBUG(prerr_string "getting register ";prerr_string (Int32.to_string i);prerr_newline();)
       registers.(Int32.to_int i)
 			   
     let register_set i v =
+      assert(0 <= (Int32.to_int i) && (Int32.to_int i) <= 31);
       DEBUG(prerr_string "setting register ";prerr_string (Int32.to_string i);prerr_string " to value ";prerr_string (Int32.to_string v);prerr_newline();)
     let i = Int32.to_int i in
       if i > 0 then registers.(i) <- v
 
     let mem_size = Code.mem_size
 
-    let mem_size_int32 = Int32.of_int mem_size
+    let mem_size_int32 = Int32.mul 4l (Int32.of_int mem_size)
 		     
     let memory =
       let res = Array1.create int32 c_layout mem_size in
@@ -126,8 +128,15 @@ module Make(Code:Code) : Emulator =
     let memory_get i = memory.{Int32.to_int i}
 			 
     let memory_set i v = memory.{Int32.to_int i} <- v
-			   
+
     let read_word addr =
+      if not (0 <= (Int32.to_int addr) && (Int32.to_int addr) <= 4*mem_size) then 
+	begin
+	  flush stderr;
+	  print_string (Int32.to_string addr);print_newline();
+	  print_string (Int32.to_string !pc);print_newline();
+	  failwith "read_word"
+	end;
       DEBUG(prerr_string "reading word at ";prerr_string (Int32.to_string addr);prerr_newline();)
 	memory_get (Int32.shift_right addr 2)
 	
@@ -322,11 +331,26 @@ module Make(Code:Code) : Emulator =
       let round n = align (Int32.add n 3l) in
       let hp_address = ref 0l 
       and hp_size = ref 0l 
+      and hp_end = ref 0l
       and sp = ref 0l in
       let alive_cells = ref Gcmap.empty 
       and dead_cells = ref Gcmap.empty 
       and stack = Stack.create () in
       let new_cell sz b = { Gcmap.size = sz; Gcmap.live = b } in
+      let dump_cells cells =
+	Gcmap.iter (fun addr c ->
+		      prerr_string "cell: ";
+		      prerr_string (Int32.to_string addr);
+		      prerr_string " size: ";
+		      prerr_string (Int32.to_string c.Gcmap.size);
+		      prerr_newline()) cells
+      in
+      let dump () =
+	prerr_string "alive cells\n";
+	dump_cells !alive_cells;
+	prerr_string "dead cells\n";
+	dump_cells !dead_cells
+      in	
       let init hp sz reg =
 	if (int32_compare hp 0l < 0) || (int32_compare hp mem_size_int32 >= 0) then
 	  failwith ("out of bounds heap start: "^(Int32.to_string hp))
@@ -344,6 +368,7 @@ module Make(Code:Code) : Emulator =
 	let sz = align sz in
 	  hp_address := hp;
 	  hp_size := sz;
+	  hp_end := Int32.add !hp_address !hp_size;
 	  sp := reg;
 	  if verbose then
 	    begin
@@ -384,6 +409,8 @@ module Make(Code:Code) : Emulator =
 		  prerr_string "[GC]";
 		  prerr_string "cell allocated: ";
 		  prerr_string (Int32.to_string addr);
+		  prerr_string " of size ";
+		  prerr_string (Int32.to_string sz);
 		  prerr_newline()
 		end;
 	      Some(addr)
@@ -411,7 +438,7 @@ module Make(Code:Code) : Emulator =
 	    else register_get !sp
 	  in
 	  let stk_address = align stk_address in
-	    if int32_compare stk_address (Int32.add !hp_address !hp_size) < 0 then
+	    if int32_compare stk_address !hp_end < 0 then
 	      failwith "stack overwrote heap";
 	    for i = 0 to 31 do
 	      mark (register_get (Int32.of_int i))
@@ -428,12 +455,14 @@ module Make(Code:Code) : Emulator =
 		done;
 		while not (Stack.is_empty stack) do
 		  let (address,c) = Stack.pop stack in
+		  let end_of_cell = Int32.add address c.Gcmap.size in
 		    i := address;
-		    while int32_compare !i (Int32.add address c.Gcmap.size) < 0 do
+		    while int32_compare !i end_of_cell < 0 do
 		      mark (read_word !i);
 		      i := Int32.add (!i) 4l
 		    done
 		done;
+		prerr_string "done\n";
 		let usage2 = ref 0l in
 		  Gcmap.iter (fun addr c ->
 				if c.Gcmap.live then
