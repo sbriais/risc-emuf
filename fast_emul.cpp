@@ -12,7 +12,7 @@
   let n = Int32.shift_right_logical n 5 in \
   let a = Int32.logand n mask_reg in \
   register_set a (op (register_get b) (register_get c)); \
-  INCRPC(four)) \
+  INCRPC(4l)) \
   | I -> \
   (function n -> \
   let c = Int32.logand n mask_imm in \
@@ -22,7 +22,7 @@
   let n = Int32.shift_right_logical n 5 in \
   let a = Int32.logand n mask_reg in \
   register_set a (op (register_get b) c); \
-  INCRPC(four)) \
+  INCRPC(4l)) \
   | IU -> \
   (function n -> \
   let c = Int32.logand n mask_imm in \
@@ -31,7 +31,7 @@
   let n = Int32.shift_right_logical n 5 in \
   let a = Int32.logand n mask_reg in \
   register_set a (op (register_get b) c); \
-  INCRPC(four)))
+  INCRPC(4l)))
 
 #define MEMOP(op) \
   (fun n -> \
@@ -42,7 +42,7 @@
   let n = Int32.shift_right_logical n 5 in \
   let a = Int32.logand mask_reg n in \
   op; \
-  INCRPC(four)) 
+  INCRPC(4l)) 
 
 #define TESTOP(op) \
   (fun n -> \
@@ -50,7 +50,7 @@
   let c = Int32.shift_right (Int32.shift_left c 11) 11 in (* 11 = 32 - 21 *) \
   let n = Int32.shift_right_logical n 21 in \
   let a = Int32.logand n mask_reg in \
-  INCRPC(Int32.mul op four))
+  INCRPC(Int32.mul op 4l))
 
 *)
 
@@ -83,9 +83,6 @@ module Make(Code:Code) : Emulator =
 
     let int32_compare a b = Int32.to_int (Int32.sub (Int32.sub a b) (Int32.sub b a))
 
-    let four = Int32.of_int 4
-    let thirty_one = Int32.of_int 31
-      
     exception Error of error
 
     let hex_string n =
@@ -99,12 +96,12 @@ module Make(Code:Code) : Emulator =
 	done;
 	!res
 
-    let pc = ref Int32.zero
+    let pc = ref 0l
 	       
     let getPC () = !pc
     let setPC v = pc := v
 
-    let registers = Array.create 32 Int32.zero
+    let registers = Array.create 32 0l
 		      
     let register_get i = 
       DEBUG(prerr_string "getting register ";prerr_string (Int32.to_string i);prerr_newline();)
@@ -122,7 +119,7 @@ module Make(Code:Code) : Emulator =
     let memory =
       let res = Array1.create int32 c_layout mem_size in
 	for i = 0 to mem_size - 1 do
-	  res.{i} <- Int32.zero
+	  res.{i} <- 0l
 	done;
 	res
 	  
@@ -147,7 +144,7 @@ module Make(Code:Code) : Emulator =
 	  
     let write_byte =
       let shift = [|24;16;8;0|] in
-      let mask = [|Int32.zero;Int32.zero;Int32.zero;Int32.zero|] in
+      let mask = [|0l;0l;0l;0l|] in
 	for i = 0 to 3 do
 	  mask.(i) <- Int32.lognot (Int32.shift_left (Int32.of_int 0xff) (shift.(i)))
 	done;
@@ -245,12 +242,12 @@ module Make(Code:Code) : Emulator =
 		| Stb -> MEMOP(write_byte (Int32.add (register_get b) c) (register_get a))
 		| Pop -> MEMOP(register_set a (read_word (register_get b));register_set b (Int32.add (register_get b) c))
 		| Psh -> MEMOP(register_set b (Int32.sub (register_get b) c);write_word (register_get b) (register_get a))
-		| Beq -> TESTOP((if int32_compare (register_get a) Int32.zero = 0 then c else Int32.one))
-		| Bne -> TESTOP((if int32_compare (register_get a) Int32.zero <> 0 then c else Int32.one))
-		| Blt -> TESTOP((if int32_compare (register_get a) Int32.zero < 0 then c else Int32.one))
-		| Bge -> TESTOP((if int32_compare (register_get a) Int32.zero >= 0 then c else Int32.one))
-		| Bgt -> TESTOP((if int32_compare (register_get a) Int32.zero > 0 then c else Int32.one))
-		| Ble -> TESTOP((if int32_compare (register_get a) Int32.zero <= 0 then c else Int32.one))
+		| Beq -> TESTOP((if int32_compare (register_get a) 0l = 0 then c else Int32.one))
+		| Bne -> TESTOP((if int32_compare (register_get a) 0l <> 0 then c else Int32.one))
+		| Blt -> TESTOP((if int32_compare (register_get a) 0l < 0 then c else Int32.one))
+		| Bge -> TESTOP((if int32_compare (register_get a) 0l >= 0 then c else Int32.one))
+		| Bgt -> TESTOP((if int32_compare (register_get a) 0l > 0 then c else Int32.one))
+		| Ble -> TESTOP((if int32_compare (register_get a) 0l <= 0 then c else Int32.one))
 		| Chk -> 
 		    (match mode with
 		       | R ->
@@ -259,8 +256,8 @@ module Make(Code:Code) : Emulator =
 			      let n = Int32.shift_right_logical n 21 in
 			      let a = Int32.logand n mask_reg in
 			      let va = register_get a in
-				if ((int32_compare va Int32.zero) >= 0) && ((int32_compare va (register_get c)) < 0) then
-				  INCRPC(four)
+				if ((int32_compare va 0l) >= 0) && ((int32_compare va (register_get c)) < 0) then
+				  INCRPC(4l)
 				else
 				  raise (Error(ChkExn)))
 		       | I ->
@@ -270,8 +267,8 @@ module Make(Code:Code) : Emulator =
 			      let n = Int32.shift_right_logical n 21 in
 			      let a = Int32.logand n mask_reg in
 			      let va = register_get a in
-				if ((int32_compare va Int32.zero) >= 0) && ((int32_compare va c) < 0) then
-				  INCRPC(four)
+				if ((int32_compare va 0l) >= 0) && ((int32_compare va c) < 0) then
+				  INCRPC(4l)
 				else
 				  raise (Error(ChkExn)))
 		       | IU ->
@@ -280,24 +277,24 @@ module Make(Code:Code) : Emulator =
 			      let n = Int32.shift_right_logical n 21 in
 			      let a = Int32.logand n mask_reg in
 			      let va = register_get a in
-				if ((int32_compare va Int32.zero) >= 0) && ((int32_compare va c) < 0) then
-				  INCRPC(four)
+				if ((int32_compare va 0l) >= 0) && ((int32_compare va c) < 0) then
+				  INCRPC(4l)
 				else
 				  raise (Error(ChkExn))))
 		| Bsr ->
 		    (fun n ->
 		       let c = Int32.logand n mask_rel in
 		       let c = Int32.shift_right (Int32.shift_left c 11) 11 in (* 11 = 32 - 21 *)
-			 register_set thirty_one (Int32.add (!pc) four);
-			 INCRPC(Int32.mul c four))
+			 register_set 31l (Int32.add (!pc) 4l);
+			 INCRPC(Int32.mul c 4l))
 		| Jsr -> 
 		    (fun n ->
-		       register_set thirty_one (Int32.add (!pc) four);
-		       pc := Int32.mul (Int32.logand mask_abs n) four)
+		       register_set 31l (Int32.add (!pc) 4l);
+		       pc := Int32.mul (Int32.logand mask_abs n) 4l)
 		| Ret -> 
 		    (fun n ->
 		       let a = Int32.logand (Int32.shift_right_logical n 21) mask_reg in
-			 if int32_compare Int32.zero a = 0 then raise (Error(Syscall(Int32.zero,Int32.zero,Risc.int_of_syscall Risc.Sys_exit)))
+			 if int32_compare 0l a = 0 then raise (Error(Syscall(0l,0l,Risc.int_of_syscall Risc.Sys_exit)))
 			 else pc := register_get a)
 		| Break -> (fun n -> raise (Error(BrkExn)))
 		| Sys ->
@@ -318,22 +315,32 @@ module Make(Code:Code) : Emulator =
 
     let verbose = false
 
+    exception Found of Int32.t
+
     let gc_init,gc_alloc =
-      let align n = n land 0x7ffffffc in
-      let round n = align (n + 3) in
-      let hp_address = ref 0 and hp_size = ref 0 and sp = ref 0 in
+      let align n = Int32.logand n 0xfffffffcl in
+      let round n = align (Int32.add n 3l) in
+      let hp_address = ref 0l 
+      and hp_size = ref 0l 
+      and sp = ref 0l in
+      let alive_cells = ref Gcmap.empty 
+      and dead_cells = ref Gcmap.empty 
+      and stack = Stack.create () in
+      let new_cell sz b = { Gcmap.size = sz; Gcmap.live = b } in
       let init hp sz reg =
-	let hp = Int32.to_int hp and sz = Int32.to_int sz and reg = Int32.to_int reg in
-	if (hp < 0) || (hp >= mem_size) then
-	  failwith ("out of bounds heap start: "^(string_of_int hp))
-	else if (hp + sz - 1 >= mem_size) then
-	  failwith ("out of bounds heap end: "^(string_of_int (hp + sz - 1)))
-	else if (sz < 0) then
-	  failwith ("negative heap size: "^(string_of_int sz));
-	let sz = if sz = 0 then mem_size else sz + hp in
+	if (int32_compare hp 0l < 0) || (int32_compare hp mem_size_int32 >= 0) then
+	  failwith ("out of bounds heap start: "^(Int32.to_string hp))
+	else if (int32_compare (Int32.add hp sz) mem_size_int32 > 0) then
+	  failwith ("out of bounds heap end: "^(Int32.to_string (Int32.add hp sz)))
+	else if (int32_compare sz 0l < 0) then
+	  failwith ("negative heap size: "^(Int32.to_string sz));
+	let sz = 
+	  if int32_compare sz 0l = 0 then mem_size_int32
+	  else Int32.add sz hp
+	in
 	let hp = round hp in
-	let sz = min sz mem_size in
-	let sz = max 0 (sz - hp) in
+	let sz = min sz mem_size_int32 in
+	let sz = max 0l (Int32.sub sz hp) in
 	let sz = align sz in
 	  hp_address := hp;
 	  hp_size := sz;
@@ -341,19 +348,124 @@ module Make(Code:Code) : Emulator =
 	  if verbose then
 	    begin
 	      prerr_string "[GC]";
-	      prerr_string "heap address = ";prerr_int (!hp_address);prerr_string ", ";
-	      prerr_string "heap size = ";prerr_int (!hp_size);prerr_string " bytes, ";
-	      if(!sp = 0) then prerr_string "no stack pointer"
-	      else (prerr_string "stack pointer = ";prerr_int (!sp));
+	      prerr_string "heap address = ";prerr_string (Int32.to_string !hp_address);prerr_string ", ";
+	      prerr_string "heap size = ";prerr_string (Int32.to_string !hp_size);prerr_string " bytes, ";
+	      if(int32_compare !sp 0l = 0) then prerr_string "no stack pointer"
+	      else (prerr_string "stack pointer = ";prerr_string (Int32.to_string !sp));
 	      prerr_newline()
-	    end
-      and alloc sz =
-	let sz = Int32.to_int sz in
-	if (sz < 0) then failwith ("negative block size: "^(string_of_int sz));
-	let sz = max 4 (round sz) in
-	let addr = !hp_address in
-	  hp_address := !hp_address + sz;
-	  Int32.of_int addr
+	    end;
+	  alive_cells := Gcmap.empty;
+	  dead_cells := Gcmap.add !hp_address (new_cell !hp_size false) (Gcmap.empty)
+      in
+      let lock sz =
+	try
+	  Gcmap.iter (fun addr c ->
+			if int32_compare c.Gcmap.size sz >= 0 then
+			  if int32_compare c.Gcmap.size sz = 0 then
+			    begin
+			      c.Gcmap.live <- false;
+			      dead_cells := Gcmap.remove addr !dead_cells;
+			      alive_cells := Gcmap.add addr c !alive_cells;
+			      raise (Found(addr))
+			    end
+			  else
+			    begin
+			      c.Gcmap.size <- Int32.sub c.Gcmap.size sz;
+			      dead_cells := Gcmap.add (Int32.add addr sz) c (Gcmap.remove addr !dead_cells);
+			      alive_cells := Gcmap.add addr (new_cell sz true) !alive_cells;
+			      raise (Found(addr))
+			    end) !dead_cells;
+	  if verbose then prerr_string "[GC]no cell allocated\n";
+	  None
+	with
+	    Found(addr) -> 
+	      if verbose then
+		begin
+		  prerr_string "[GC]";
+		  prerr_string "cell allocated: ";
+		  prerr_string (Int32.to_string addr);
+		  prerr_newline()
+		end;
+	      Some(addr)
+      in
+      let mark addr = 
+	try
+	  let c = Gcmap.find addr !alive_cells in
+	    if not (c.Gcmap.live) then
+	      begin
+		c.Gcmap.live <- true;
+		Stack.push (addr,c) stack
+	      end
+	with Not_found -> ()
+      and add_dead addr c = 
+	let addr' = Int32.add addr c.Gcmap.size in
+	  dead_cells := Gcmap.add_or_join addr addr' c !dead_cells
+      in
+      let free () = 
+	let usage1 = ref 0l in
+	  Gcmap.iter (fun addr c ->
+			c.Gcmap.live <- false;
+			usage1 := Int32.add (!usage1) c.Gcmap.size) !alive_cells;
+	  let stk_address = 
+	    if int32_compare !sp 0l = 0 then (Int32.add !hp_address !hp_size)
+	    else register_get !sp
+	  in
+	  let stk_address = align stk_address in
+	    if int32_compare stk_address (Int32.add !hp_address !hp_size) < 0 then
+	      failwith "stack overwrote heap";
+	    for i = 0 to 31 do
+	      mark (register_get (Int32.of_int i))
+	    done;
+	      let i = ref Int32.zero in
+		while int32_compare !i !hp_address < 0 do
+		  mark (read_word !i);
+		  i := Int32.add (!i) 4l
+		done;
+		i := stk_address;
+		while int32_compare !i mem_size_int32 < 0 do
+		  mark (read_word !i);
+		  i := Int32.add (!i) 4l
+		done;
+		while not (Stack.is_empty stack) do
+		  let (address,c) = Stack.pop stack in
+		    i := address;
+		    while int32_compare !i (Int32.add address c.Gcmap.size) < 0 do
+		      mark (read_word !i);
+		      i := Int32.add (!i) 4l
+		    done
+		done;
+		let usage2 = ref 0l in
+		  Gcmap.iter (fun addr c ->
+				if c.Gcmap.live then
+				  usage2 := Int32.add (!usage2) c.Gcmap.size
+				else
+				  begin
+				    alive_cells := Gcmap.remove addr !alive_cells;
+				    add_dead addr c
+				  end)
+		    !alive_cells;
+		  if verbose then
+		    begin
+		      prerr_string "[GC]";
+		      prerr_string (Int32.to_string (!usage1));
+		      prerr_string " bytes -> ";
+		      prerr_string (Int32.to_string (!usage2));
+		      prerr_string " bytes";
+		      prerr_newline()
+		    end
+      in
+      let alloc sz =
+	if (int32_compare sz 0l < 0) then failwith ("negative block size: "^(Int32.to_string sz));
+	let sz = max 4l (round sz) in
+	  match lock sz with
+	    | Some(addr) -> addr
+	    | None -> 
+		begin
+		  free ();
+		  match lock sz with
+		    | Some(addr) -> addr
+		    | None -> failwith ("could not allocate block of "^(Int32.to_string sz)^" bytes")
+		end
       in init,alloc
 
     let exec () = 
@@ -396,7 +508,7 @@ module Make(Code:Code) : Emulator =
 			    register_set a (gc_alloc sz)
 		      | _ -> failwith "syscall not yet implemented"
 		   );
-		   INCRPC(four)
+		   INCRPC(4l)
 	       | None -> raise (Error(Illegal)))
 	done
   end
