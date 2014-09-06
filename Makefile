@@ -13,12 +13,12 @@ INCL=-I +labltk
 #OCAMLNLDFLAGS = -ccopt -static
 OCAMLFLAGS=-unsafe -annot -warn-error +a -w +a-4-42-45
 
-VERSION=0.0.1
+VERSION=0.1.2
 
 SRCMLI=
 SRCMLI+=
 
-SRCML=
+SRCML=version.ml
 SRCML+=risc.ml
 SRCML+=scanner.ml
 SRCML+=parser.ml

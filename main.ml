@@ -12,6 +12,8 @@ let open_file filename =
   if filename = "--stdin" then stdin
   else Pervasives.open_in filename
 
+let info = Format.sprintf "risc-emuf (version %s)" Version.version
+
 let _ =
   let _ = Arg.parse
 	    ["-mem",Arg.Set_int(mem_size),"set memory size";
@@ -21,7 +23,7 @@ let _ =
 	     "--stdin",Arg.Unit(function () -> filename := "--stdin"),"use standard input";
 	    ]
 	    (fun s -> filename := s)
-	    ("risc-emuf")
+	    info
   in
   let in_channel = open_file !filename in
   let scanner = new Scanner.scanner (Scanner.charReader_of_in_channel in_channel) in
