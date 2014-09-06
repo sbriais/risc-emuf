@@ -111,7 +111,7 @@ module Make(Code:Code) : Emulator =
 	    
     type mode = R | I | IU | Rel | Abs | Other
 	
-    let exec_op =
+    let get_op_table =
       let instrs =
 	let arith = [0,Add; 1,Sub; 2,Mul; 3,Div; 4,Mod; 5,Cmp]
 	in
@@ -348,19 +348,17 @@ module Make(Code:Code) : Emulator =
 			 raise (Error(Syscall(a,b,Int32.to_int c))))
 	      with Not_found -> ()
 	done;
-	fun n -> 
-	  let opcode = (Int32.to_int (Int32.shift_right_logical n 26)) land 0x3f in
-	    (* prerr_string "opcode: ";prerr_int opcode;prerr_newline(); *)
-	    ops.(opcode) n
+	ops
 
     let _ =
       Code.code#iter (fun i instr ->
 			memory_set (Int32.of_int i) (Codec.code_instruction instr))
 
+    let verbose = false
+
     let gc_init,gc_alloc =
       let align n = n land 0x7ffffffc in
       let round n = align (n + 3) in
-      let verbose = false in
       let hp_address = ref 0 and hp_size = ref 0 and sp = ref 0 in
       let init hp sz reg =
 	if (hp < 0) || (hp >= mem_size) then
@@ -398,7 +396,9 @@ module Make(Code:Code) : Emulator =
       while true do
 	(* prerr_string "PC: ";prerr_string (Int32.to_string (!pc));prerr_newline(); *)
 	try
-	  exec_op (read_word (!pc))
+	  let n = read_word (!pc) in
+	  let opcode = (Int32.to_int (Int32.shift_right_logical n 26)) land 0x3f in
+	    get_op_table.(opcode) (n)
 	with Error(Syscall(a,b,c)) ->
 	  (match Risc.syscall_of_int c with
 	     | Some(syscall) -> 
