@@ -1,30 +1,20 @@
 module Make(Emulator:Fast_emul.Emulator) =
   struct
 
-    let hexstring_of_int32 = 
-      let digit = [|"0";"1";"2";"3";"4";"5";"6";"7";"8";"9";"A";"B";"C";"D";"E";"F"|] in
-	function n ->
-	  let s = ref "" in
-	  let n = ref n in
-	    for i = 0 to 7 do
-	      let c = Int32.to_int (Int32.shift_right_logical !n 28) in
-		n := Int32.shift_left !n 4;
-		s := !s^(digit.(c));
-	    done;
-	    !s
+    let hexstring_of_int32 n = Format.sprintf "%08lX" n
 
-    let add_refresh,refresh = 
+    let add_refresh,refresh =
       let refresh_action = ref [] in
-      let add_refresh f = 
+      let add_refresh f =
 	refresh_action := f::!refresh_action
       in
-      let refresh () = 
+      let refresh () =
 	List.iter (function f -> f ()) !refresh_action;
 	Tk.update ()
       in add_refresh,refresh
 
     let safe_callback c =
-      try c () 
+      try c ()
       with
 	| Emulator.Error(Emulator.Illegal) ->
 	    prerr_string "illegal instruction";prerr_newline()
@@ -43,44 +33,44 @@ module Make(Emulator:Fast_emul.Emulator) =
 		prerr_string (Int32.to_string n);
 		prerr_newline()
 	      end
-	| Failure(s) -> 
+	| Failure(s) ->
 	    prerr_string "Uncaught exception: ";
 	    prerr_string s;
 	    prerr_newline ()
-	| Invalid_argument(s) -> 
+	| Invalid_argument(s) ->
 	    prerr_string "Uncaught exception: ";
 	    prerr_string "invalid argument ";
 	    prerr_string s;
 	    prerr_newline ()
-	| e ->
+	| _ ->
 	    prerr_string "Uncaught exception: ";
 	    prerr_newline ()
 
-    let run_callback () = 
+    let run_callback () =
       safe_callback (function () ->
 		       while true do
 			 Emulator.tick ();
 		       done);
       refresh()
 
-    let step_callback () = 
+    let step_callback () =
       safe_callback Emulator.tick;
       refresh ()
 
-    let reset_callback () = 
+    let reset_callback () =
       safe_callback Emulator.reset;
       refresh()
 
     let string_of_value addr value =
       let st = Codec.decode_instruction value in
       let s1 = hexstring_of_int32 addr in
-      let s2 = hexstring_of_int32 value in 
+      let s2 = hexstring_of_int32 value in
       let s3 = if addr = Emulator.getPC() then "> " else "  " in
       let s4 = Risc.string_of_instruction st in
 	s1^": "^s2^" "^s3^" "^s4
 
     let dump_mem b l =
-      if b then 
+      if b then
 	begin
 	  Listbox.delete ~first:(`Num(0)) ~last:`End l;
 	  for i = 0 to Emulator.mem_size-1 do
@@ -88,9 +78,9 @@ module Make(Emulator:Fast_emul.Emulator) =
 	      Listbox.insert ~index:`End ~texts:[string_of_value (Int32.shift_left (Int32.of_int i) 2) v] l
 	  done
 	end
-      else 
+      else
 	begin
-	  let `Num(i) = Listbox.nearest l 0 in
+	  let `Num(i) = Listbox.nearest l ~y:0 in
 	  let imin = max 0 (i-50) and imax = min (i+50) (Listbox.size l) in
 	    Listbox.delete ~first:(`Num(imin)) ~last:(`Num(imax)) l;
 	    for i = imin to imax do
@@ -99,7 +89,7 @@ module Make(Emulator:Fast_emul.Emulator) =
 	    done
 	end
 
-    let mkGui top = 
+    let mkGui top =
       Wm.title_set top "Risc Emulator";
       let base = Frame.create top in
       let registers = Frame.create base in
@@ -114,7 +104,7 @@ module Make(Emulator:Fast_emul.Emulator) =
 	(* bottom bar *)
 	let bpc = Button.create ~text:"PC" base3 in
 	let lpc = Label.create ~text:(hexstring_of_int32 (Emulator.getPC())) base3 in
-	  add_refresh (function () -> 
+	  add_refresh (function () ->
 			 Label.configure lpc ~text:(hexstring_of_int32 (Emulator.getPC())));
 	  let breset = Button.create ~text:"Reset" ~command:reset_callback base3 in
 	  let brun = Button.create ~text:"Run" ~command:run_callback base3 in
@@ -132,14 +122,14 @@ module Make(Emulator:Fast_emul.Emulator) =
 		Tk.pack ~side:`Left ~expand:true [lmem];
 		add_refresh (function () -> dump_mem false lmem);
 	    (* registers *)
-	    let rwidgets = Array.map 
-			     (List.map (fun r -> 
+	    let rwidgets = Array.map
+			     (List.map (fun r ->
 					  let w = Frame.create registers in
 					  let b = Button.create ~text:("R"^(Int32.to_string r)) w in
 					  let l = Label.create ~text:(hexstring_of_int32 (Emulator.register_get r)) w in
 					    Tk.pack ~side:`Left ~expand:true [b];
 					    Tk.pack ~side:`Left ~expand:true [l];
-					    add_refresh (function () -> 
+					    add_refresh (function () ->
 							   Label.configure l ~text:(hexstring_of_int32 (Emulator.register_get r)));
 					    w))
 			     [|[0l;4l;8l;12l;16l;20l;24l;28l];
@@ -150,8 +140,8 @@ module Make(Emulator:Fast_emul.Emulator) =
 	  for i = 0 to 4-1 do
 	    Grid.configure ~row:i (rwidgets.(i))
 	  done
-	
-    let exec () = 
+
+    let exec () =
       let top = Tk.openTk () in
 	Tk.appname_set "Risc Emulator";
 	mkGui top;

@@ -16,7 +16,7 @@ let _ =
   let _ = Arg.parse
 	    ["-mem",Arg.Set_int(mem_size),"set memory size";
 	     "-slow",Arg.Clear(fast),"use slow emulator (legacy)";
-(*	     "-gui",Arg.Set(gui),"use GUI"; *)
+	     "-gui",Arg.Set(gui),"use GUI";
 	     "-dump",Arg.Set(dump),"just dump code";
 	     "--stdin",Arg.Unit(function () -> filename := "--stdin"),"use standard input";
 	    ]
@@ -38,12 +38,12 @@ let _ =
 						 let code = code
 					       end)
 	  in
-(*	    if !gui then *)
-(*	      begin *)
-(*		let module Gui = Gui.Make(Emulator) in *)
-(*		  Gui.exec () *)
-(*	      end *)
-(*	    else *)
+	    if !gui then
+	      begin
+		let module Gui = Gui.Make(Emulator) in
+		  Gui.exec ()
+	      end
+	    else
 	      begin
 		try
 		  Emulator.exec ()

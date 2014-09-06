@@ -8,7 +8,7 @@ OCAMLC=ocamlc
 OCAMLDEP=ocamldep
 	endif
 
-INCL=
+INCL=-I +labltk
 
 #OCAMLNLDFLAGS = -ccopt -static
 OCAMLFLAGS=-unsafe -annot -warn-error +a -w +a-4-42-45
@@ -20,12 +20,13 @@ SRCMLI+=
 
 SRCML=
 SRCML+=risc.ml
+SRCML+=scanner.ml
+SRCML+=parser.ml
 SRCML+=codec.ml
 SRCML+=gcmap.ml
 SRCML+=emulator.ml
-SRCML+=scanner.ml
-SRCML+=parser.ml
 SRCML+=fast_emul.ml
+SRCML+=gui.ml
 SRCML+=main.ml
 
 SRCS=$(SRCML) $(SRCMLI)
@@ -34,7 +35,7 @@ PROJECT=risc-emuf
 
 EXTRA=README.md Makefile
 
-LIBS=bigarray
+LIBS=bigarray labltk
 
 BYTELIBS=$(LIBS:=.cma)
 NATIVELIBS=$(LIBS:=.cmxa)
