@@ -25,7 +25,10 @@ module Make(Code:Code) : Emulator =
   struct
     type error = Illegal | BrkExn | ChkExn | Exit of Int32.t | Syscall of Int32.t * Int32.t * int 
 
-    let int32_compare a b = Int32.to_int (Int32.sub a b)
+    let int32_compare a b = Int32.to_int (Int32.sub (Int32.sub a b) (Int32.sub b a))
+
+    let four = Int32.of_int 4
+    let thirty_one = Int32.of_int 31
       
     exception Error of error
 
@@ -41,9 +44,6 @@ module Make(Code:Code) : Emulator =
 	!res
 
     let pc = ref Int32.zero
-
-    let four = Int32.of_int 4
-    let thirty_one = Int32.of_int 31
 	       
     let getPC () = !pc
     let setPC v = pc := v
@@ -60,6 +60,8 @@ module Make(Code:Code) : Emulator =
 	registers.(Int32.to_int i) <- v
 	  
     let mem_size = Code.mem_size
+
+    let mem_size_int32 = Int32.of_int mem_size
 		     
     let memory =
       let res = Array1.create int32 c_layout mem_size in
