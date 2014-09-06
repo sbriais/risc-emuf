@@ -46,6 +46,8 @@ module Tokens =
       | BREAK
       | SYSCALL
       | DATA
+      | ASCIIZ
+      | ASCIIL
       | REG of int
 	  
     let compare_token t t' =
@@ -90,6 +92,9 @@ module Tokens =
 		  "SYSCALL",SYSCALL;
 		  "DATA",DATA;
 		  "DW",DATA;
+		  "STRING",ASCIIZ;
+		  "ASCIIZ",ASCIIZ;
+		  "ASCIIL",ASCIIL;
 		 ] in
       let regs = 
 	let l = ref [] in

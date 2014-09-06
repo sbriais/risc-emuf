@@ -78,6 +78,24 @@ let unop_of_token = function
   | MINUS -> unop_freeze Int32.neg
   | BNOT -> unop_freeze Int32.lognot
 
+let gen_string str =
+  let n = String.length str in
+  let getChar i = 
+    if i < n then Int32.of_int (Char.code str.[i])
+    else 0l
+  in
+  let rec aux i accu =
+    if i < n then
+      let v = ref 0l in
+	for j = 0 to 3 do
+	  let c = getChar (i+j) in
+	    v := Int32.shift_left (!v) 8;
+	    v := Int32.logor (!v) c
+	done;
+	aux (i+4) (Data(fun () -> !v)::accu)
+    else List.rev accu
+  in aux 0 []
+
 let rec parse_expression scanner code = 
   let rec aux expr =
     match scanner#currentToken with
@@ -288,27 +306,16 @@ let parse_instruction scanner code =
 	     | None -> raise (ParseError("unknown syscall: "^(string_of_int n))))
     | DATA ->
 	scanner#nextToken;
-	(match scanner#currentToken with
-	  | STRING(s) -> 
-	      scanner#nextToken;
-	      let n = String.length s in
-	      let l = ref [] in
-	      let len = 4 * ((n+4) / 4) in
-	      let i = ref 0 in
-		while !i < len do
-		  let v = ref 0l in
-		    for j = 0 to 3 do
-		      let c = Int32.of_int (Char.code (if !i < n then s.[!i] else '\000')) in
-			incr i;
-			v := Int32.shift_left (!v) 8;
-			v := Int32.logor (!v) c
-		    done;
-		    l := Data(fun () -> !v)::!l
-		done;
-		List.rev (!l)
-	  | _ -> 
-	      let e = parse_expression scanner code in
-		[Data(e)])
+	let e = parse_expression scanner code in
+	  [Data(e)]
+    | ASCIIZ ->
+	scanner#nextToken;
+	let STRING(s) = accept_token scanner (STRING("")) in
+	  gen_string (s^"\000")
+    | ASCIIL ->
+	scanner#nextToken;
+	let STRING(s) = accept_token scanner (STRING("")) in
+	  gen_string ((String.make 1 (Char.chr (String.length s)))^s)
     | _ -> raise (ParseError("expected token: "^"a mnemonic"^"\tfound:"^(string_of_token scanner#currentToken)^" at "^(string_of_position scanner#getPosition)))
 
 let parse_program scanner = 
