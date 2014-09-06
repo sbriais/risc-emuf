@@ -453,7 +453,6 @@ module Make(Code:Code) : Emulator =
 		      i := Int32.add (!i) 4l
 		    done
 		done;
-		prerr_string "done\n";
 		let usage2 = ref 0l in
 		  Gcmap.iter (fun addr c ->
 				if c.Gcmap.live then
