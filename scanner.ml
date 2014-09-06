@@ -260,7 +260,7 @@ object(self)
                     STRING(string)
                   end
 	  | c when isLetter(c) ->
-	      let string = string_such_that (isLetter ||| isDigit ||| (isChar '_')) in
+	      let string = string_such_that (isLetter ||| isDigit ||| (isChar '_') ||| (isChar '.')) in
 		begin
 		  try
 		    Hashtbl.find keywords string 

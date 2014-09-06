@@ -2,20 +2,25 @@ let filename = ref ""
 
 let mem_size = ref 16000
 
-let fast = ref false 
+let fast = ref true 
 
 let dump = ref false
+
+let open_file filename = 
+  if filename = "--stdin" then stdin
+  else Pervasives.open_in filename
 
 let _ =
   let _ = Arg.parse 
 	    ["-mem",Arg.Set_int(mem_size),"set memory size";
-	     "-fast",Arg.Set(fast),"use fast emulator";
+	    (* "-fast",Arg.Set(fast),"use fast emulator"; *)
 	     "-dump",Arg.Set(dump),"just dump code";
+	     "--stdin",Arg.Unit(function () -> filename := "--stdin"),"use standard input";
 	    ]
 	    (fun s -> filename := s)
 	    ("risc-emuf")
   in
-  let in_channel = Pervasives.open_in (!filename) in
+  let in_channel = open_file !filename in
   let scanner = new Scanner.scanner (Scanner.charReader_of_in_channel in_channel) in
   let code = Parser.parse_program scanner in
     if !dump then
