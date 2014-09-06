@@ -313,7 +313,7 @@ module Make(Code:Code) : Emulator =
       Code.code#iter (fun i instr ->
 			memory_set (Int32.of_int i) (Codec.code_instruction instr))
 
-    let verbose = true
+    let verbose = false
 
     let gc_init,gc_alloc =
       let align n = n land 0x7ffffffc in
