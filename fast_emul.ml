@@ -8,6 +8,10 @@ module type Code =
 	
 module type Emulator =
   sig
+    type error = Illegal | BrkExn | ChkExn | Exit of Int32.t | Syscall of Int32.t * Int32.t * int 
+      
+    exception Error of error
+
     val register_get : Int32.t -> Int32.t
     val register_set : Int32.t -> Int32.t -> unit
     val read_word : Int32.t -> Int32.t
@@ -19,16 +23,36 @@ module type Emulator =
 
 module Make(Code:Code) : Emulator = 
   struct
+    type error = Illegal | BrkExn | ChkExn | Exit of Int32.t | Syscall of Int32.t * Int32.t * int 
+      
+    exception Error of error
+
     let pc = ref Int32.zero
+
+    let four = Int32.of_int 4
+    let thirty_one = Int32.of_int 31
 	       
     let getPC () = !pc
     let setPC v = pc := v
 
     let registers = Array.create 32 Int32.zero
 		      
-    let register_get i = registers.(Int32.to_int i)
+    let register_get i = 
+(*
+  prerr_string "getting register ";
+  prerr_string (Int32.to_string i);
+  prerr_newline();
+*)
+      registers.(Int32.to_int i)
 			   
     let register_set i v =
+(*
+  prerr_string "setting register ";
+  prerr_string (Int32.to_string i);
+  prerr_string " to value ";
+  prerr_string (Int32.to_string v);
+  prerr_newline();
+*)
       if Int32.compare Int32.zero i <> 0 then
 	registers.(Int32.to_int i) <- v
 	  
@@ -71,9 +95,6 @@ module Make(Code:Code) : Emulator =
 		 (Int32.logand (mask.(i)) (read_word addr))
 		 (Int32.shift_left (Int32.logand v (Int32.of_int 0xff)) (shift.(i))))
 	      
-    type error = Illegal | Syscall of int
-      
-    exception Error of error
       
     type instruction = 
       | Add | Sub | Mul | Div | Cmp | Mod
@@ -83,9 +104,9 @@ module Make(Code:Code) : Emulator =
       | Beq | Bne | Blt | Bge | Bgt | Ble
       | Chk 
       | Bsr | Jsr | Ret
-      | Break | Syscall 
+      | Break | Sys
 	    
-    type mode = R | I | IU | Rel | Abs | Sys | N | R1
+    type mode = R | I | IU | Rel | Abs | Other
 	
     let exec_op =
       let instrs =
@@ -109,17 +130,18 @@ module Make(Code:Code) : Emulator =
 	let mem = List.map (fun (x,y) -> (x,y,I)) mem in
 	let test = [40,Beq;41,Bne;42,Blt;43,Bge;44,Ble;45,Bgt] in
 	let test = List.map (fun (x,y) -> (x,y,Rel)) test in
-	let bsr = [46,Bsr,Rel] and jsr = [48,Jsr,Abs] and ret = [49,Ret,R1] in
-	let brk = [6,Break,N] and sysc = [7,Syscall,Sys] in
+	let bsr = [46,Bsr,Rel] and jsr = [48,Jsr,Abs] and ret = [49,Ret,Other] in
+	let brk = [6,Break,Other] and sysc = [7,Sys,Other] in
 	  arith@log@sh@chk@mem@test@bsr@jsr@ret@brk@sysc
       in
       let size = 1 lsl 6 in
       let ops = Array.create size (fun n -> raise (Error(Illegal))) in
-      let mask_reg = Int32.of_int 0x1f in
-      let mask_imm = Int32.of_int 0xffff in
-      let mask_sign = Int32.of_int 0x8000 in
-      let ext_sign = Int32.shift_left (Int32.of_int 0xffff) 16 in
-      let four = Int32.of_int 4 in
+      let mask_reg = Int32.of_int 0x1f 
+      and mask_imm = Int32.of_int 0xffff 
+      and mask_rel = Int32.of_int 0x1fffff
+      and mask_abs = Int32.of_int 0x3ffffff
+      and mask_sign = Int32.of_int 0x8000 
+      and ext_sign = Int32.shift_left (Int32.of_int 0xffff) 16 in
       let iadd a b = Int32.add a b 
       and isub a b = Int32.sub a b 
       and imul a b = Int32.mul a b
@@ -139,11 +161,11 @@ module Make(Code:Code) : Emulator =
 	  if b < 0 then Int32.shift_right a ((-b) land 0x1f)
 	  else Int32.shift_left a (b land 0x1f)
       in
-      let riiu iop = function
+      let int_op iop = function
 	| R ->
 	    (function n ->
 	       let c = Int32.logand mask_reg n in
-	       let n = Int32.shift_right_logical n 21 in
+	       let n = Int32.shift_right_logical n 16 in
 	       let b = Int32.logand mask_reg n in
 	       let n = Int32.shift_right_logical n 5 in
 	       let a = Int32.logand mask_reg n in
@@ -154,7 +176,7 @@ module Make(Code:Code) : Emulator =
 	    (function n ->
 	       let c = Int32.logand mask_imm n in
 	       let c = if Int32.compare Int32.zero (Int32.logand mask_sign c) <> 0 then Int32.logor ext_sign c else c in
-	       let n = Int32.shift_right_logical n 21 in
+	       let n = Int32.shift_right_logical n 16 in
 	       let b = Int32.logand mask_reg n in
 	       let n = Int32.shift_right_logical n 5 in
 	       let a = Int32.logand mask_reg n in
@@ -163,38 +185,80 @@ module Make(Code:Code) : Emulator =
 	| IU ->
 	    (function n ->
 	       let c = Int32.logand mask_imm n in
-	       let n = Int32.shift_right_logical n 21 in
+	       let n = Int32.shift_right_logical n 16 in
 	       let b = Int32.logand mask_reg n in
 	       let n = Int32.shift_right_logical n 5 in
 	       let a = Int32.logand mask_reg n in
 		 register_set a (iop (register_get b) c);
 		 pc := Int32.add four (!pc))
       in
+      let test_op iop =
+	(fun n ->
+	   let jmp = Int32.logand mask_rel n in
+	   let n = Int32.shift_right_logical n 21 in
+	   let a = Int32.logand mask_reg n in
+	     pc := Int32.add (Int32.mul four (iop (register_get a) jmp)) (!pc))
+      in
 	for i = 0 to size - 1 do
 	  try
 	    let (_,op,mode) = List.find (fun (x,_,_) -> x = i) instrs in
 	      ops.(i) <-
 	      match op with
-		| Add -> riiu iadd mode
-		| Sub -> riiu isub mode
-		| Mul -> riiu imul mode
-		| Div -> riiu idiv mode
-		| Cmp -> riiu icmp mode
-		| Mod -> riiu imod mode
-		| And -> riiu iand mode
-		| Or -> riiu ior mode
-		| Xor -> riiu ixor mode
-		| Bic -> riiu ibic mode
-		| Lsh -> riiu ilsh mode
-		| Ash -> riiu iash mode
-		| Ldw | Ldb | Stw | Stb | Pop | Psh
-		| Beq | Bne | Blt | Bge | Bgt | Ble
-		| Chk 
-		| Bsr | Jsr | Ret
-		| Break | Syscall -> raise Not_found
+		| Add -> int_op iadd mode
+		| Sub -> int_op isub mode
+		| Mul -> int_op imul mode
+		| Div -> int_op idiv mode
+		| Cmp -> int_op icmp mode
+		| Mod -> int_op imod mode
+		| And -> int_op iand mode
+		| Or -> int_op ior mode
+		| Xor -> int_op ixor mode
+		| Bic -> int_op ibic mode
+		| Lsh -> int_op ilsh mode
+		| Ash -> int_op iash mode
+		| Ldw 
+		| Ldb 
+		| Stw 
+		| Stb 
+		| Pop 
+		| Psh -> raise Not_found
+		| Beq -> test_op (fun v dep -> if Int32.compare v Int32.zero = 0 then dep else Int32.one)
+		| Bne -> test_op (fun v dep -> if Int32.compare v Int32.zero <> 0 then dep else Int32.one)
+		| Blt -> test_op (fun v dep -> if Int32.compare v Int32.zero < 0 then dep else Int32.one)
+		| Bge -> test_op (fun v dep -> if Int32.compare v Int32.zero >= 0 then dep else Int32.one)
+		| Bgt -> test_op (fun v dep -> if Int32.compare v Int32.zero > 0 then dep else Int32.one)
+		| Ble -> test_op (fun v dep -> if Int32.compare v Int32.zero <= 0 then dep else Int32.one)
+		| Chk -> raise Not_found
+		| Bsr ->
+		    (fun n ->
+		       register_set thirty_one (Int32.add (!pc) four);
+		       pc := Int32.add (!pc) (Int32.mul four (Int32.logand mask_rel n)))
+		| Jsr -> 
+		    (fun n ->
+		       register_set thirty_one (Int32.add (!pc) four);
+		       pc := Int32.logand mask_abs n)
+		| Ret -> 
+		    (fun n ->
+		       let a = Int32.logand mask_reg (Int32.shift_right_logical n 21) in
+			 if Int32.compare Int32.zero a = 0 then raise (Error(Syscall(Int32.zero,Int32.zero,Risc.int_of_syscall Risc.Sys_exit)))
+			 else pc := register_get a)
+		| Break -> (fun n -> raise (Error(BrkExn)))
+		| Sys ->
+		    (fun n ->
+		       let c = Int32.logand mask_imm n in
+		       let n = Int32.shift_right_logical n 16 in
+		       let b = Int32.logand mask_reg n in
+		       let n = Int32.shift_right_logical n 5 in
+		       let a = Int32.logand mask_reg n in
+			 raise (Error(Syscall(a,b,Int32.to_int c))))
 	      with Not_found -> ()
 	done;
-	ops
+	fun n -> 
+	  let opcode = (Int32.to_int (Int32.shift_right_logical n 26)) land 0x3f in
+(*
+  prerr_string "opcode: ";prerr_int opcode;prerr_newline();
+*)
+	    ops.(opcode) n
 
     let _ =
       Code.code#iter (fun i instr ->
@@ -202,8 +266,36 @@ module Make(Code:Code) : Emulator =
 
     let exec () = 
       while true do
-	let n = read_word (!pc) in
-	let opcode = (Int32.to_int (Int32.shift_right_logical n 26)) land 0x3f in
-	  exec_op.(opcode) n
+(*
+  prerr_string "PC: ";
+  prerr_string (Int32.to_string (!pc));
+  prerr_newline();
+*)
+	try
+	  exec_op (read_word (!pc))
+	with Error(Syscall(a,b,c)) ->
+	  (match Risc.syscall_of_int c with
+	     | Some(syscall) -> 
+		 (match syscall with
+		    | Risc.Sys_exit -> raise (Error(Exit(register_get a)))
+		    | Risc.Sys_io_wr_chr ->
+			Pervasives.output_char stdout (Char.chr ((Int32.to_int (register_get a)) land 0xff));
+		    | Risc.Sys_io_wr_int ->
+			Pervasives.output_string stdout (Int32.to_string (register_get a))
+		    | Risc.Sys_io_flush ->
+			Pervasives.flush stdout
+		    | Risc.Sys_io_rd_chr ->
+			let n = 
+			  try Pervasives.input_byte stdin
+			  with End_of_file -> -1
+			in
+			  register_set a (Int32.of_int n)
+		    | Risc.Sys_io_rd_int ->
+			register_set a (Int32.of_string (Pervasives.input_line stdin))
+		    | Risc.Sys_get_total_mem_size ->
+			register_set a (Int32.of_int mem_size)
+		 );
+		 pc := Int32.add four (!pc)
+	     | None -> raise (Error(Illegal)))
       done
 end
