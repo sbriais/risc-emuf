@@ -10,25 +10,25 @@ let accept_token scanner t =
     if compare_token t t' = 0 then (scanner#nextToken; t')
     else raise (ParseError("expected token: "^(string_of_token t)^"\tfound:"^(string_of_token t')^" at "^(string_of_position scanner#getPosition)))
 
-let analyze_int scanner =
+let parse_int scanner =
   let INT(n) = accept_token scanner (INT(Int32.zero)) in
     Int32.to_int n
 
-let analyze_register scanner =
+let parse_register scanner =
   match scanner#currentToken with
       REG(n) -> 
 	scanner#nextToken;
 	R(n)
     | _ ->
-	let n = analyze_int scanner in
+	let n = parse_int scanner in
 	  if 0 <= n && n <= 31 then R(n)
 	  else raise (ParseError("invalid register R"^(string_of_int n)))
 
-let analyze_relative scanner code =
+let parse_relative scanner code =
   match scanner#currentToken with
       MINUS ->
 	scanner#nextToken;
-	let n = analyze_int scanner in
+	let n = parse_int scanner in
 	  Relative(freeze (-n))
     | IDENT(s) ->
 	scanner#nextToken;
@@ -36,21 +36,21 @@ let analyze_relative scanner code =
 	let label = code#getLabel s in
 	  Relative(fun () -> (label ()) - pc)
     | _ ->
-	let n = analyze_int scanner in
+	let n = parse_int scanner in
 	  Relative(freeze n)
 
-let analyze_absolute scanner code =
+let parse_absolute scanner code =
   match scanner#currentToken with
       MINUS ->
 	scanner#nextToken;
-	let n = analyze_int scanner in
+	let n = parse_int scanner in
 	  Absolute(freeze (-n))
     | IDENT(s) ->
 	scanner#nextToken;
 	let label = code#getLabel s in
 	  Absolute(label)
     | _ ->
-	let n = analyze_int scanner in
+	let n = parse_int scanner in
 	  Absolute(freeze n)
 
 (* 
@@ -72,35 +72,35 @@ let binop_of_token = function
 let unop_of_token = function
   | MINUS -> unop_freeze Int32.neg
 
-let rec analyze_expression scanner code = 
+let rec parse_expression scanner code = 
   let rec aux expr =
     match scanner#currentToken with
 	PLUS | MINUS ->
 	  let op = binop_of_token scanner#currentToken in
 	    scanner#nextToken;
-	    let term = analyze_term scanner code in
+	    let term = parse_term scanner code in
 	      aux (op expr term)
       | _ -> expr
-  in aux (analyze_term scanner code)
-and analyze_term scanner code =
+  in aux (parse_term scanner code)
+and parse_term scanner code =
   let rec aux term =
     match scanner#currentToken with
 	MULT ->
 	  let op = binop_of_token scanner#currentToken in
 	    scanner#nextToken;
-	    let factor = analyze_factor0 scanner code in
+	    let factor = parse_factor0 scanner code in
 	      aux (op term factor)
       | _ -> term
-  in aux (analyze_factor0 scanner code)
-and analyze_factor0 scanner code =
+  in aux (parse_factor0 scanner code)
+and parse_factor0 scanner code =
   match scanner#currentToken with
       MINUS -> 
 	let op = unop_of_token scanner#currentToken in
 	  scanner#nextToken;
-	  let factor = analyze_factor scanner code in
+	  let factor = parse_factor scanner code in
 	    op factor
-    | _ -> analyze_factor scanner code
-and analyze_factor scanner code =
+    | _ -> parse_factor scanner code
+and parse_factor scanner code =
   match scanner#currentToken with
       INT(n) ->
 	scanner#nextToken;
@@ -111,60 +111,60 @@ and analyze_factor scanner code =
 	  (fun () -> Int32.of_int (label ()))
     | _ ->
 	ignore (accept_token scanner LPAREN);
-	let e = analyze_expression scanner code in
+	let e = parse_expression scanner code in
 	  ignore (accept_token scanner RPAREN);
 	  e
 
-let analyze_int_expression scanner code =
-  let e = analyze_expression scanner code in
+let parse_int_expression scanner code =
+  let e = parse_expression scanner code in
     (fun () -> (Int32.to_int (e ())))
 
-let analyze_a_riiu_r scanner code = AR(analyze_register scanner)
-let analyze_a_riiu_i scanner code = AI(Signed(analyze_int_expression scanner code))
-let analyze_a_riiu_iu scanner code = AIU(Unsigned(analyze_int_expression scanner code))
+let parse_a_riiu_r scanner code = AR(parse_register scanner)
+let parse_a_riiu_i scanner code = AI(Signed(parse_int_expression scanner code))
+let parse_a_riiu_iu scanner code = AIU(Unsigned(parse_int_expression scanner code))
 
-let analyze_b_ri_r scanner code = BR(analyze_register scanner)
-let analyze_b_ri_i scanner code = BI(Signed(analyze_int_expression scanner code))
+let parse_b_ri_r scanner code = BR(parse_register scanner)
+let parse_b_ri_i scanner code = BI(Signed(parse_int_expression scanner code))
 
 let arith_op_of_token = function
-    | ADD -> Add,analyze_a_riiu_r
-    | SUB -> Sub,analyze_a_riiu_r
-    | MUL -> Mul,analyze_a_riiu_r
-    | DIV -> Div,analyze_a_riiu_r
-    | CMP -> Cmp,analyze_a_riiu_r
-    | MOD -> Mod,analyze_a_riiu_r
-    | ADDI -> Add,analyze_a_riiu_i
-    | SUBI -> Sub,analyze_a_riiu_i
-    | MULI -> Mul,analyze_a_riiu_i
-    | DIVI -> Div,analyze_a_riiu_i
-    | CMPI -> Cmp,analyze_a_riiu_i
-    | MODI -> Mod,analyze_a_riiu_i
-    | ADDIU -> Add,analyze_a_riiu_iu
-    | SUBIU -> Sub,analyze_a_riiu_iu
-    | MULIU -> Mul,analyze_a_riiu_iu
-    | DIVIU -> Div,analyze_a_riiu_iu
-    | CMPIU -> Cmp,analyze_a_riiu_iu
-    | MODIU -> Mod,analyze_a_riiu_iu
+    | ADD -> Add,parse_a_riiu_r
+    | SUB -> Sub,parse_a_riiu_r
+    | MUL -> Mul,parse_a_riiu_r
+    | DIV -> Div,parse_a_riiu_r
+    | CMP -> Cmp,parse_a_riiu_r
+    | MOD -> Mod,parse_a_riiu_r
+    | ADDI -> Add,parse_a_riiu_i
+    | SUBI -> Sub,parse_a_riiu_i
+    | MULI -> Mul,parse_a_riiu_i
+    | DIVI -> Div,parse_a_riiu_i
+    | CMPI -> Cmp,parse_a_riiu_i
+    | MODI -> Mod,parse_a_riiu_i
+    | ADDIU -> Add,parse_a_riiu_iu
+    | SUBIU -> Sub,parse_a_riiu_iu
+    | MULIU -> Mul,parse_a_riiu_iu
+    | DIVIU -> Div,parse_a_riiu_iu
+    | CMPIU -> Cmp,parse_a_riiu_iu
+    | MODIU -> Mod,parse_a_riiu_iu
 
 let log_op_of_token = function
-    | AND -> And,analyze_a_riiu_r
-    | OR -> Or,analyze_a_riiu_r
-    | XOR -> Xor,analyze_a_riiu_r
-    | BIC -> Bic,analyze_a_riiu_r
-    | ANDI -> And,analyze_a_riiu_i
-    | ORI -> Or,analyze_a_riiu_i
-    | XORI -> Xor,analyze_a_riiu_i
-    | BICI -> Bic,analyze_a_riiu_i
-    | ANDIU -> And,analyze_a_riiu_iu
-    | ORIU -> Or,analyze_a_riiu_iu
-    | XORIU -> Xor,analyze_a_riiu_iu
-    | BICIU -> Bic,analyze_a_riiu_iu
+    | AND -> And,parse_a_riiu_r
+    | OR -> Or,parse_a_riiu_r
+    | XOR -> Xor,parse_a_riiu_r
+    | BIC -> Bic,parse_a_riiu_r
+    | ANDI -> And,parse_a_riiu_i
+    | ORI -> Or,parse_a_riiu_i
+    | XORI -> Xor,parse_a_riiu_i
+    | BICI -> Bic,parse_a_riiu_i
+    | ANDIU -> And,parse_a_riiu_iu
+    | ORIU -> Or,parse_a_riiu_iu
+    | XORIU -> Xor,parse_a_riiu_iu
+    | BICIU -> Bic,parse_a_riiu_iu
 
 let sh_op_of_token = function
-  | LSH -> Lsh,analyze_b_ri_r
-  | ASH -> Ash,analyze_b_ri_r
-  | LSHI -> Lsh,analyze_b_ri_i
-  | ASHI -> Ash,analyze_b_ri_i
+  | LSH -> Lsh,parse_b_ri_r
+  | ASH -> Ash,parse_b_ri_r
+  | LSHI -> Lsh,parse_b_ri_i
+  | ASHI -> Ash,parse_b_ri_i
 
 let mem_op_of_token = function
     LDW -> Ldw
@@ -183,11 +183,11 @@ let test_op_of_token = function
   | BLT -> Blt 
 
 let chk_op_of_token = function
-  | CHK -> (fun a c -> Chk(a,c)),analyze_a_riiu_r
-  | CHKI -> (fun a c -> Chk(a,c)),analyze_a_riiu_i
-  | CHKIU -> (fun a c -> Chk(a,c)),analyze_a_riiu_iu
+  | CHK -> (fun a c -> Chk(a,c)),parse_a_riiu_r
+  | CHKI -> (fun a c -> Chk(a,c)),parse_a_riiu_i
+  | CHKIU -> (fun a c -> Chk(a,c)),parse_a_riiu_iu
 
-let analyze_instruction scanner code =
+let parse_instruction scanner code =
   match scanner#currentToken with
     | ADD | ADDI | ADDIU
     | SUB | SUBI | SUBIU
@@ -197,8 +197,8 @@ let analyze_instruction scanner code =
     | MOD | MODI | MODIU ->
 	let (op,third) = arith_op_of_token scanner#currentToken in
 	  scanner#nextToken;
-	  let ra = analyze_register scanner in
-	  let rb = analyze_register scanner in
+	  let ra = parse_register scanner in
+	  let rb = parse_register scanner in
 	  let rc = third scanner code in
 	    IArith(op,ra,rb,rc)
     | AND | ANDI | ANDIU
@@ -207,16 +207,16 @@ let analyze_instruction scanner code =
     | BIC | BICI | BICIU ->
 	let (op,third) = log_op_of_token scanner#currentToken in
 	  scanner#nextToken;
-	  let ra = analyze_register scanner in
-	  let rb = analyze_register scanner in
+	  let ra = parse_register scanner in
+	  let rb = parse_register scanner in
 	  let rc = third scanner code in
 	    ILog(op,ra,rb,rc)
     | LSH | LSHI
     | ASH | ASHI ->
 	let (op,third) = sh_op_of_token scanner#currentToken in
 	  scanner#nextToken;
-	  let ra = analyze_register scanner in
-	  let rb = analyze_register scanner in
+	  let ra = parse_register scanner in
+	  let rb = parse_register scanner in
 	  let rc = third scanner code in
 	    ISh(op,ra,rb,rc)
     | LDW
@@ -227,9 +227,9 @@ let analyze_instruction scanner code =
     | PSH ->
 	let op = mem_op_of_token scanner#currentToken in
 	  scanner#nextToken;
-	  let ra = analyze_register scanner in
-	  let rb = analyze_register scanner in
-	  let rc = Signed(analyze_int_expression scanner code) in
+	  let ra = parse_register scanner in
+	  let rb = parse_register scanner in
+	  let rc = Signed(parse_int_expression scanner code) in
 	    IMem(op,ra,rb,rc)
     | BEQ
     | BNE
@@ -239,45 +239,45 @@ let analyze_instruction scanner code =
     | BLE ->
 	let op = test_op_of_token scanner#currentToken in
 	  scanner#nextToken;
-	  let ra = analyze_register scanner in
-	  let rc = analyze_relative scanner code in
+	  let ra = parse_register scanner in
+	  let rc = parse_relative scanner code in
 	    ITest(op,ra,rc)
     | CHK | CHKI | CHKIU ->
 	let chk,second = chk_op_of_token scanner#currentToken in
 	  scanner#nextToken;
-	  let ra = analyze_register scanner in
+	  let ra = parse_register scanner in
 	  let rc = second scanner code in
 	    chk ra rc
     | BSR ->
 	scanner#nextToken;
-	let rc = analyze_relative scanner code in
+	let rc = parse_relative scanner code in
 	  Bsr(rc)
     | JSR ->
 	scanner#nextToken;
-	let rc = analyze_absolute scanner code in
+	let rc = parse_absolute scanner code in
 	  Jsr(rc)
     | RET ->
 	scanner#nextToken;
-	let ra = analyze_register scanner in
+	let ra = parse_register scanner in
 	  Ret(ra)
     | BREAK ->
 	scanner#nextToken;
 	Break
     | SYSCALL ->
 	scanner#nextToken;
-	let ra = analyze_register scanner in
-	let rb = analyze_register scanner in
-	let n = analyze_int scanner in
+	let ra = parse_register scanner in
+	let rb = parse_register scanner in
+	let n = parse_int scanner in
 	  (match syscall_of_int n with
 	       Some(syscall) -> Syscall(ra,rb,syscall)
 	     | None -> raise (ParseError("unknown syscall: "^(string_of_int n))))
     | DATA ->
 	scanner#nextToken;
-	let e = analyze_expression scanner code in
+	let e = parse_expression scanner code in
 	  Data(e)
     | _ -> raise (ParseError("expected token: "^"a mnemonic"^"\tfound:"^(string_of_token scanner#currentToken)^" at "^(string_of_position scanner#getPosition)))
 
-let analyze_program scanner = 
+let parse_program scanner = 
   let rec aux code = 
     match scanner#currentToken with
 	EOF -> code
@@ -287,6 +287,6 @@ let analyze_program scanner =
 	  code#setLabel s;
 	  aux code
       | _ -> 
-	  code#emit (analyze_instruction scanner code);
+	  code#emit (parse_instruction scanner code);
 	  aux code
   in aux (new code_generator)

@@ -14,7 +14,7 @@ let _ =
   in
   let in_channel = Pervasives.open_in (!filename) in
   let scanner = new Scanner.scanner (Scanner.charReader_of_in_channel in_channel) in
-  let code = Analyzer.analyze_program scanner in
+  let code = Parser.parse_program scanner in
     if !fast then
       let module Emulator = Fast_emul.Make(struct
 					     let mem_size = !mem_size
