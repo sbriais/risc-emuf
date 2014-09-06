@@ -85,7 +85,9 @@ module Tokens =
 		  "RET",RET;
 		  "BREAK",BREAK;
 		  "SYSCALL",SYSCALL;
-		  "DATA",DATA] in
+		  "DATA",DATA;
+		  "DW",DATA;
+		 ] in
       let regs = 
 	let l = ref [] in
 	  for i = 31 downto 0 do

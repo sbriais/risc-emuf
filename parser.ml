@@ -108,7 +108,7 @@ and parse_factor scanner code =
     | IDENT(s) ->
 	scanner#nextToken;
 	let label = code#getLabel s in
-	  (fun () -> Int32.of_int (label ()))
+	  (fun () -> Int32.of_int (4*label ()))
     | _ ->
 	ignore (accept_token scanner LPAREN);
 	let e = parse_expression scanner code in

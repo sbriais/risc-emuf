@@ -381,7 +381,7 @@ object(self)
 	| Data(_) -> raise (Error(Illegal(pc)))
   method start =
     while true do
-      (* prerr_int pc;prerr_newline(); *)
+(*       prerr_int pc;prerr_newline(); *)
       let instr = self#fetch pc in
 	pc <- self#exec instr pc
     done

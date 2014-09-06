@@ -135,7 +135,7 @@ let mnemo_of_instruction = function
   | Ret(_) -> "RET"
   | Break -> "BREAK"
   | Syscall(_) -> "SYSCALL"
-  | Data(_) -> "DATA"
+  | Data(_) -> "DW"
 
 let string_of_instruction instr = 
   let sep = " " in
