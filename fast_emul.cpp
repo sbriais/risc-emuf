@@ -1,5 +1,7 @@
 (*
 
+#define DEBUG(e) 
+
 #define INTOP(op) \
   (match mode with | R -> (function n -> \
   let c = Int32.logand n mask_reg in \
@@ -103,14 +105,13 @@ module Make(Code:Code) : Emulator =
     let registers = Array.create 32 Int32.zero
 		      
     let register_get i = 
-      (* prerr_string "getting register ";prerr_string (Int32.to_string i);prerr_newline(); *)
+      DEBUG(prerr_string "getting register ";prerr_string (Int32.to_string i);prerr_newline();)
       registers.(Int32.to_int i)
 			   
     let register_set i v =
-      (* prerr_string "setting register ";prerr_string (Int32.to_string i);prerr_string " to value ";prerr_string (Int32.to_string v);prerr_newline(); *)
-      (* if int32_compare i Int32.zero <> 0 then registers.(Int32.to_int i) <- v; *)
-      let i = Int32.to_int i in
-	if i > 0 then registers.(i) <- v
+      DEBUG(prerr_string "setting register ";prerr_string (Int32.to_string i);prerr_string " to value ";prerr_string (Int32.to_string v);prerr_newline();)
+    let i = Int32.to_int i in
+      if i > 0 then registers.(i) <- v
 
     let mem_size = Code.mem_size
 
@@ -128,12 +129,12 @@ module Make(Code:Code) : Emulator =
     let memory_set i v = memory.{Int32.to_int i} <- v
 			   
     let read_word addr =
-      (* prerr_string "reading word at ";prerr_string (Int32.to_string addr);prerr_newline(); *)
-      memory_get (Int32.shift_right addr 2)
+      DEBUG(prerr_string "reading word at ";prerr_string (Int32.to_string addr);prerr_newline();)
+	memory_get (Int32.shift_right addr 2)
 	
     let write_word addr v =
-      (* prerr_string "writting word at ";prerr_string (Int32.to_string addr);prerr_string ": ";prerr_string (Int32.to_string v);prerr_newline(); *)
-      memory_set (Int32.shift_right addr 2) v
+      DEBUG(prerr_string "writting word at ";prerr_string (Int32.to_string addr);prerr_string ": ";prerr_string (Int32.to_string v);prerr_newline();)
+	memory_set (Int32.shift_right addr 2) v
 	
     let read_byte =
       let shift = [|24;16;8;0|] in
@@ -356,7 +357,7 @@ module Make(Code:Code) : Emulator =
     let exec () = 
       let mask_sz = Int32.of_int 0x1ffffff in
 	while true do
-	  (* prerr_string "PC: ";prerr_string (Int32.to_string (!pc));prerr_newline(); *)
+	  DEBUG(prerr_string "PC: ";prerr_string (Int32.to_string (!pc));prerr_newline();)
 	  try
 	    let n = read_word (!pc) in
 	    let opcode = (Int32.to_int (Int32.shift_right_logical n 26)) land 0x3f in
