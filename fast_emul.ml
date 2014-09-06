@@ -175,8 +175,7 @@ module Make(Code:Code) : Emulator =
 	       let n = Int32.shift_right_logical n 5 in
 	       let a = Int32.logand n mask_reg in
 		 register_set a (iop (register_get b) (register_get c));
-		 pc := Int32.add four (!pc)
-	    )
+		 pc := Int32.add (!pc) four)
 	| I ->
 	    (function n ->
 	       let c = Int32.logand n mask_imm in
@@ -186,7 +185,7 @@ module Make(Code:Code) : Emulator =
 	       let n = Int32.shift_right_logical n 5 in
 	       let a = Int32.logand n mask_reg in
 		 register_set a (iop (register_get b) c);
-		 pc := Int32.add four (!pc))
+		 pc := Int32.add (!pc) four)
 	| IU ->
 	    (function n ->
 	       let c = Int32.logand n mask_imm in
@@ -195,15 +194,15 @@ module Make(Code:Code) : Emulator =
 	       let n = Int32.shift_right_logical n 5 in
 	       let a = Int32.logand n mask_reg in
 		 register_set a (iop (register_get b) c);
-		 pc := Int32.add four (!pc))
-      in
+		 pc := Int32.add (!pc) four)
+      in 
       let test_op iop =
 	(fun n ->
 	   let c = Int32.logand n mask_rel in
 	   let c = if Int32.compare (Int32.logand c mask_sign_rel) Int32.zero <> 0 then Int32.logor c ext_sign_rel else c in
 	   let n = Int32.shift_right_logical n 21 in
-	   let a = Int32.logand mask_reg n in
-	     pc := Int32.add (Int32.mul four (iop (register_get a) c)) (!pc))
+	   let a = Int32.logand n mask_reg in
+	     pc := Int32.add (Int32.mul (iop (register_get a) c) four) (!pc))
       in
 	for i = 0 to size - 1 do
 	  try
@@ -231,8 +230,7 @@ module Make(Code:Code) : Emulator =
 		       let n = Int32.shift_right_logical n 5 in
 		       let a = Int32.logand mask_reg n in
 			 register_set a (read_word (Int32.add (register_get b) c));
-			 pc := Int32.add four (!pc)
-		    )
+			 pc := Int32.add (!pc) four)
 		| Ldb -> 
 		    (function n ->
 		       let c = Int32.logand mask_imm n in
@@ -242,7 +240,7 @@ module Make(Code:Code) : Emulator =
 		       let n = Int32.shift_right_logical n 5 in
 		       let a = Int32.logand mask_reg n in
 			 register_set a (read_byte (Int32.add (register_get b) c));
-			 pc := Int32.add four (!pc))
+			 pc := Int32.add (!pc) four)
 		| Stw -> 
 		    (function n ->
 		       let c = Int32.logand mask_imm n in
@@ -252,7 +250,7 @@ module Make(Code:Code) : Emulator =
 		       let n = Int32.shift_right_logical n 5 in
 		       let a = Int32.logand mask_reg n in
 			 write_word (Int32.add (register_get b) c) (register_get a);
-			 pc := Int32.add four (!pc))
+			 pc := Int32.add (!pc) four)
 		| Stb -> 
 		    (function n ->
 		       let c = Int32.logand mask_imm n in
@@ -262,7 +260,7 @@ module Make(Code:Code) : Emulator =
 		       let n = Int32.shift_right_logical n 5 in
 		       let a = Int32.logand mask_reg n in
 			 write_byte (Int32.add (register_get b) c) (register_get a);
-			 pc := Int32.add four (!pc))
+			 pc := Int32.add (!pc) four)
 		| Pop ->
 		    (function n ->
 		       let c = Int32.logand mask_imm n in
@@ -273,7 +271,7 @@ module Make(Code:Code) : Emulator =
 		       let a = Int32.logand mask_reg n in
 			 register_set a (read_word (register_get b));
 			 register_set b (Int32.add (register_get b) c);
-			 pc := Int32.add four (!pc))
+			 pc := Int32.add (!pc) four)
 		| Psh -> 
 		    (function n ->
 		       let c = Int32.logand mask_imm n in
@@ -284,7 +282,7 @@ module Make(Code:Code) : Emulator =
 		       let a = Int32.logand mask_reg n in
 			 register_set b (Int32.sub (register_get b) c);
 			 write_word (register_get b) (register_get a);
-			 pc := Int32.add four (!pc))
+			 pc := Int32.add (!pc) four)
 		| Beq -> test_op (fun v dep -> if Int32.compare v Int32.zero = 0 then dep else Int32.one)
 		| Bne -> test_op (fun v dep -> if Int32.compare v Int32.zero <> 0 then dep else Int32.one)
 		| Blt -> test_op (fun v dep -> if Int32.compare v Int32.zero < 0 then dep else Int32.one)
@@ -295,30 +293,30 @@ module Make(Code:Code) : Emulator =
 		    (match mode with
 		       | R ->
 			   (function n ->
-			      let c = Int32.logand mask_reg n in
+			      let c = Int32.logand n mask_reg in
 			      let n = Int32.shift_right_logical n 21 in
-			      let a = Int32.logand mask_reg n in
+			      let a = Int32.logand n mask_reg in
 			      let va = register_get a in
 				if ((Int32.compare va Int32.zero) >= 0) && ((Int32.compare va (register_get c)) < 0) then
-				  pc := Int32.add four (!pc)
+				  pc := Int32.add (!pc) four
 				else
 				  raise (Error(ChkExn)))
 		       | I ->
 			   (function n ->
-			      let c = Int32.logand mask_imm n in
+			      let c = Int32.logand n mask_imm in
 			      let c = if Int32.compare Int32.zero (Int32.logand mask_sign_imm c) <> 0 then Int32.logor ext_sign_imm c else c in
 			      let n = Int32.shift_right_logical n 21 in
-			      let a = Int32.logand mask_reg n in
+			      let a = Int32.logand n mask_reg in
 			      let va = register_get a in
 				if ((Int32.compare va Int32.zero) >= 0) && ((Int32.compare va c) < 0) then
-				  pc := Int32.add four (!pc)
+				  pc := Int32.add (!pc) four
 				else
 				  raise (Error(ChkExn)))
 		       | IU ->
 			   (function n ->
-			      let c = Int32.logand mask_imm n in
+			      let c = Int32.logand n mask_imm in
 			      let n = Int32.shift_right_logical n 21 in
-			      let a = Int32.logand mask_reg n in
+			      let a = Int32.logand n mask_reg in
 			      let va = register_get a in
 				if ((Int32.compare va Int32.zero) >= 0) && ((Int32.compare va c) < 0) then
 				  pc := Int32.add four (!pc)
@@ -326,25 +324,27 @@ module Make(Code:Code) : Emulator =
 				  raise (Error(ChkExn))))
 		| Bsr ->
 		    (fun n ->
-		       register_set thirty_one (Int32.add (!pc) four);
-		       pc := Int32.add (!pc) (Int32.mul four (Int32.logand mask_rel n)))
+		       let c = Int32.logand n mask_rel in
+		       let c = if Int32.compare (Int32.logand c mask_sign_rel) Int32.zero <> 0 then Int32.logor c ext_sign_rel else c in
+			 register_set thirty_one (Int32.add (!pc) four);
+			 pc := Int32.add (!pc) (Int32.mul c four))
 		| Jsr -> 
 		    (fun n ->
 		       register_set thirty_one (Int32.add (!pc) four);
-		       pc := Int32.mul four (Int32.logand mask_abs n))
+		       pc := Int32.mul (Int32.logand mask_abs n) four)
 		| Ret -> 
 		    (fun n ->
-		       let a = Int32.logand mask_reg (Int32.shift_right_logical n 21) in
+		       let a = Int32.logand (Int32.shift_right_logical n 21) mask_reg in
 			 if Int32.compare Int32.zero a = 0 then raise (Error(Syscall(Int32.zero,Int32.zero,Risc.int_of_syscall Risc.Sys_exit)))
 			 else pc := register_get a)
 		| Break -> (fun n -> raise (Error(BrkExn)))
 		| Sys ->
 		    (fun n ->
-		       let c = Int32.logand mask_imm n in
+		       let c = Int32.logand n mask_imm in
 		       let n = Int32.shift_right_logical n 16 in
-		       let b = Int32.logand mask_reg n in
+		       let b = Int32.logand n mask_reg in
 		       let n = Int32.shift_right_logical n 5 in
-		       let a = Int32.logand mask_reg n in
+		       let a = Int32.logand n mask_reg in
 			 raise (Error(Syscall(a,b,Int32.to_int c))))
 	      with Not_found -> ()
 	done;
@@ -356,6 +356,43 @@ module Make(Code:Code) : Emulator =
     let _ =
       Code.code#iter (fun i instr ->
 			memory_set (Int32.of_int i) (Codec.code_instruction instr))
+
+    let gc_init,gc_alloc =
+      let align n = n land 0x7ffffffc in
+      let round n = align (n + 3) in
+      let verbose = false in
+      let hp_address = ref 0 and hp_size = ref 0 and sp = ref 0 in
+      let init hp sz reg =
+	if (hp < 0) || (hp >= mem_size) then
+	  failwith ("out of bounds heap start: "^(string_of_int hp))
+	else if (hp + sz - 1 >= mem_size) then
+	  failwith ("out of bounds heap end: "^(string_of_int (hp + sz - 1)))
+	else if (sz < 0) then
+	  failwith ("negative heap size: "^(string_of_int sz));
+	let sz = if sz = 0 then mem_size else sz + hp in
+	let hp = round hp in
+	let sz = min sz mem_size in
+	let sz = max 0 (sz - hp) in
+	let sz = align sz in
+	  hp_address := hp;
+	  hp_size := sz;
+	  sp := reg;
+	  if verbose then
+	    begin
+	      prerr_string "[GC]";
+	      prerr_string "heap address = ";prerr_int (!hp_address);prerr_string ", ";
+	      prerr_string "heap size = ";prerr_int (!hp_size);prerr_string " bytes, ";
+	      if(!sp = 0) then prerr_string "no stack pointer"
+	      else (prerr_string "stack pointer = ";prerr_int (!sp));
+	      prerr_newline()
+	    end
+      and alloc sz =
+	if (sz < 0) then failwith ("negative block size: "^(string_of_int sz));
+	let sz = max 4 (round sz) in
+	let addr = !hp_address in
+	  hp_address := !hp_address + sz;
+	  addr
+      in init,alloc
 
     let exec () = 
       while true do
@@ -383,8 +420,15 @@ module Make(Code:Code) : Emulator =
 			register_set a (Int32.of_string (Pervasives.input_line stdin));
 		    | Risc.Sys_get_total_mem_size ->
 			register_set a (Int32.of_int mem_size)
-		    | Risc.Sys_gc_init -> failwith "gc_init"
-		    | Risc.Sys_gc_alloc -> failwith "gc_init"
+		    | Risc.Sys_gc_init -> 
+			let ra = Int32.to_int (register_get a) 
+			and rb = register_get b in
+			let sz = Int32.to_int (Int32.logand rb (Int32.of_int 0x1ffffff)) 
+			and sp = Int32.to_int (Int32.shift_right_logical rb 27) in
+			  gc_init ra (4*sz) sp
+		    | Risc.Sys_gc_alloc -> 
+			let sz = Int32.to_int (register_get b) in
+			  register_set a (Int32.of_int (gc_alloc sz))
 		    | _ -> ()
 		 );
 		 pc := Int32.add four (!pc)
