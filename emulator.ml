@@ -85,20 +85,14 @@ object(self)
       emu#writeWord (c.address+4*i) (Int32.zero)
     done
   method private mark addr =
-    match CellSet.fold (fun c cell ->
-			  match cell with
-			    | None -> 
-				if c.address = addr then Some(c)
-				else None
-			    | Some(_) -> cell) alive_cells None
-    with
-      | None -> ()
-      | Some(c) ->
-	  if not (c.alive) then
-	    begin
-	      c.alive <- true;
-	      Stack.push c stack;
-	    end
+    try
+      let c = CellSet.find (new_cell addr 0 false) alive_cells in
+	if not (c.alive) then
+	  begin
+	    c.alive <- true;
+	    Stack.push c stack;
+	  end
+    with Not_found -> ()
   method private free emu =
     let usage1 = ref 0 in
       CellSet.iter (fun c ->
