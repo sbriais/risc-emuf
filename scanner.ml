@@ -1,6 +1,6 @@
 module Tokens =
   struct
-    type token = 
+    type token =
 	(* tokens de controle *)
       | BAD of char | EOF
 	    (* tokens classiques *)
@@ -49,16 +49,16 @@ module Tokens =
       | ASCIIZ
       | ASCIIL
       | REG of int
-	  
+
     let compare_token t t' =
       match (t,t') with
-	| BAD(_),BAD(_) -> 0
-	| INT(_),INT(_) -> 0
-	| IDENT(_),IDENT(_) -> 0
-	| STRING(_),STRING(_) -> 0
-	| _,_ -> Pervasives.compare t t'
-	    
-    let keywords = 
+	| BAD(_), BAD(_) -> 0
+	| INT(_), INT(_) -> 0
+	| IDENT(_), IDENT(_) -> 0
+	| STRING(_), STRING(_) -> 0
+	| _, _ -> Pervasives.compare t t'
+
+    let keywords =
       let keywords = Hashtbl.create 10 in
       let kwds = ["ADD",ADD;"ADDI",ADDI;"ADDIU",ADDIU;
 		  "SUB",SUB;"SUBI",SUBI;"SUBIU",SUBIU;
@@ -96,7 +96,7 @@ module Tokens =
 		  "ASCIIZ",ASCIIZ;
 		  "ASCIIL",ASCIIL;
 		 ] in
-      let regs = 
+      let regs =
 	let l = ref [] in
 	  for i = 31 downto 0 do
 	    l := (("R"^(string_of_int i)),REG(i)):: !l
@@ -107,13 +107,13 @@ module Tokens =
       let kwds = kwds @ (List.map (fun (s,t) -> (String.lowercase s,t)) kwds) in
       let _ = List.iter (fun (s,t) -> Hashtbl.add keywords s t) kwds
       in keywords
-	   
+
     let string_of_token = function
       | BAD(c) -> "<bad:"^(String.make 1 c)^">"
       | EOF -> "<eof>"
-      | IDENT(s) -> "IDENT"
-      | STRING(s) -> "STRING"
-      | INT(n) -> "INT"
+      | IDENT _ -> "IDENT"
+      | STRING _ -> "STRING"
+      | INT _ -> "INT"
       | PLUS -> "+"
       | MINUS -> "-"
       | MULT -> "*"
@@ -132,7 +132,7 @@ module Tokens =
 	      | None -> "<?>"
 	  end
   end
-  
+
 open Tokens
 
 class charReader = fun input_char ->
@@ -150,16 +150,16 @@ object(self)
     begin
       match cchar with
 	  None -> ()
-	| Some('\n') -> 
+	| Some('\n') ->
 	    column <- 0;
 	    line <- line + 1
-	| _ -> 
+	| _ ->
 	    column <- column + 1
     end;
     cchar <- self#readChar;
     ochar <-
-    if ochar= Some('\r') && cchar = Some('\n') 
-    then self#readChar 
+    if ochar= Some('\r') && cchar = Some('\n')
+    then self#readChar
     else cchar;
     cchar <- if ochar = Some('\r') then Some('\n') else ochar
   method currentChar = cchar
@@ -170,8 +170,8 @@ end
 
 let charReader_of_string s =
   let i = ref 0 and n = String.length s in
-  let input_char () = 
-    if !i < n then 
+  let input_char () =
+    if !i < n then
       let c = s.[!i] in incr i; c
     else raise End_of_file
   in
@@ -182,12 +182,12 @@ let charReader_of_in_channel c =
 
 exception UnclosedComment of (int * int)
 
-class scanner = 
+class scanner =
   let isChar c = function
       None -> false
     | Some(c') -> c == c'
-  in 
-  let ( ||| ) f f' c = (f c) || (f' c) 
+  in
+  let ( ||| ) f f' c = (f c) || (f' c)
   and ( === ) c c' = isChar c' c
   and isNot f c = not (f c)
   in
@@ -215,29 +215,30 @@ class scanner =
       let string_such_that p =
 	let buf = Buffer.create 10 in
 	  while(p chars#currentChar) do
-	    let Some(c) = chars#currentChar in
+	    match chars#currentChar with
+	    | None -> assert false
+	    | Some c ->
 	      chars#nextChar;
 	      Buffer.add_char buf c
 	  done;
 	  Buffer.contents buf
       in
-      let read_number pos prefix p = 
+      let read_number _pos prefix p =
 	let string = prefix^(string_such_that p) in
 	  begin
 	    try
 	      INT(Int32.of_string string)
-	    with Failure(_) -> 
-	      failwith ("Integer too big: "^string);
-	      INT(Int32.zero)
+	    with Failure(_) ->
+	      failwith ("Integer too big: "^string)
 	  end
       in
 object(self)
   val mutable token = EOF
   val mutable start = (0,0)
   method private readToken =
-    if isWhitespace chars#currentChar then 
+    if isWhitespace chars#currentChar then
       begin
-	chars#nextChar; 
+	chars#nextChar;
 	self#readToken
       end
     else
@@ -295,59 +296,59 @@ object(self)
 			| Some('>') -> acceptToken BASHR
 			| _ -> BSHR)
 		 | _ -> failwith "invalid token >")
-	  | Some('"') -> 
+	  | Some('"') ->
 	      chars#nextChar;
-              let isPrematureEnd = isEof ||| (isChar '\n') in
-              let string = string_such_that (isNot ((isChar '"') ||| isPrematureEnd)) in
-                if isPrematureEnd chars#currentChar then
-                  failwith "unterminated string"
-                else
-                  begin
-                    chars#nextChar;
-                    STRING(string)
-                  end
+	      let isPrematureEnd = isEof ||| (isChar '\n') in
+	      let string = string_such_that (isNot ((isChar '"') ||| isPrematureEnd)) in
+		if isPrematureEnd chars#currentChar then
+		  failwith "unterminated string"
+		else
+		  begin
+		    chars#nextChar;
+		    STRING(string)
+		  end
 	  | c when isLetter(c) ->
 	      let string = string_such_that (isLetter ||| isDigit ||| (isChar '_') ||| (isChar '.')) in
 		begin
 		  try
-		    Hashtbl.find keywords string 
+		    Hashtbl.find keywords string
 		  with Not_found -> IDENT(string)
 		end
-	  | c when c === '0' -> 
+	  | c when c === '0' ->
 	      let pos = chars#getPosition in
 		chars#nextChar;
 		(match chars#currentChar with
-		   | Some('x') | Some('X') -> 
+		   | Some('x') | Some('X') ->
 		       chars#nextChar;
 		       read_number pos "0x" isHexDigit
-		   | Some('o') | Some('O') -> 
+		   | Some('o') | Some('O') ->
 		       chars#nextChar;
 		       read_number pos "0o" isOctDigit
-		   | Some('b') | Some('B') -> 
+		   | Some('b') | Some('B') ->
 		       chars#nextChar;
 		       read_number pos "0b" isBinDigit
 		   | _ -> (INT(Int32.zero)))
 	  | c when isDigit(c) ->
 	      let pos = chars#getPosition in
-		read_number pos "" isDigit 
+		read_number pos "" isDigit
 	  | Some(c) -> acceptToken (BAD(c))
       end
   method currentToken = token
   method nextToken = token <- self#readToken
   method getPosition = start
-  initializer 
+  initializer
     self#nextToken
 end
 
 class scannerLLk = fun (chars:charReader) ->
-object(self)
+object
   val scanner = new scanner chars
   val mutable start = (0,0)
   val mutable token = EOF
   val mutable tokens = []
-  method nextToken = 
+  method nextToken =
     match tokens with
-	[] -> 
+	[] ->
 	  scanner#nextToken;
 	  token <- scanner#currentToken;
 	  start <- scanner#getPosition
@@ -358,7 +359,7 @@ object(self)
   method peekAhead i =
     assert (i >= 0);
     let accu = ref [] in
-      for j = List.length tokens to i do
+      for _j = List.length tokens to i do
 	scanner#nextToken;
 	accu := (scanner#getPosition,scanner#currentToken)::(!accu);
       done;
@@ -370,4 +371,3 @@ object(self)
     start <- scanner#getPosition;
     token <- scanner#currentToken
 end
-

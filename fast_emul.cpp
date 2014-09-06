@@ -6,7 +6,7 @@
 #define MASK_REL 0x1fffffl
 #define MASK_ABS 0x3ffffffl
 
-#define DEBUG(e) 
+#define DEBUG(e)
 
 #define INCRPC(i) pc := Int32.add (i) (!pc)
 
@@ -37,7 +37,8 @@
   let n = Int32.shift_right_logical n 5 in \
   let a = Int32.logand n MASK_REG in \
   register_set a (op (register_get b) c); \
-  INCRPC(4l)))
+  INCRPC(4l)) \
+  | Rel | Abs | Other -> assert false)
 
 #define MEMOP(op) \
   (fun n -> \
@@ -48,7 +49,7 @@
   let n = Int32.shift_right_logical n 5 in \
   let a = Int32.logand MASK_REG n in \
   op; \
-  INCRPC(4l)) 
+  INCRPC(4l))
 
 #define TESTOP(op) \
   (fun n -> \
@@ -62,19 +63,19 @@
 
 open Bigarray
 
-module type Code = 
+module type Code =
   sig
     val mem_size : int
     val code : Risc.code_generator
   end
-	
+
 module type Emulator =
   sig
-    type error = Illegal | BrkExn | ChkExn | Exit of Int32.t | Syscall of Int32.t * Int32.t * int 
-      
+    type error = Illegal | BrkExn | ChkExn | Exit of Int32.t | Syscall of Int32.t * Int32.t * int
+
     exception Error of error
 
-    val mem_size : int 
+    val mem_size : int
     val register_get : Int32.t -> Int32.t
     val register_set : Int32.t -> Int32.t -> unit
     val read_word : Int32.t -> Int32.t
@@ -86,36 +87,25 @@ module type Emulator =
     val exec : unit -> unit
   end
 
-module Make(Code:Code) : Emulator = 
+module Make(Code:Code) : Emulator =
   struct
-    type error = Illegal | BrkExn | ChkExn | Exit of Int32.t | Syscall of Int32.t * Int32.t * int 
+    type error = Illegal | BrkExn | ChkExn | Exit of Int32.t | Syscall of Int32.t * Int32.t * int
 
     let int32_compare a b = Int32.to_int (Int32.sub (Int32.sub a b) (Int32.sub b a))
 
     exception Error of error
 
-    let hex_string n =
-      let res = ref "" in
-	for i = 7 downto 0 do
-	  let v = Int32.to_int (Int32.logand (Int32.shift_right_logical n (4*i)) (Int32.of_int 0xf)) in
-	    if v < 10 then 
-	      res := (!res)^(String.make 1 (Char.chr (48+v)))
-	    else 
-	      res := (!res)^(String.make 1 (Char.chr (65+v-10)))
-	done;
-	!res
-
     let pc = ref 0l
-	       
+
     let getPC () = !pc
     let setPC v = pc := v
 
     let registers = Array.create 32 0l
-		      
-    let register_get i = 
+
+    let register_get i =
       DEBUG(prerr_string "getting register ";prerr_string (Int32.to_string i);prerr_newline();)
       registers.(Int32.to_int i)
-			   
+
     let register_set i v =
       DEBUG(prerr_string "setting register ";prerr_string (Int32.to_string i);prerr_string " to value ";prerr_string (Int32.to_string v);prerr_newline();)
     let i = Int32.to_int i in
@@ -124,28 +114,28 @@ module Make(Code:Code) : Emulator =
     let mem_size = Code.mem_size
 
     let mem_size_int32 = Int32.mul 4l (Int32.of_int mem_size)
-		     
+
     let memory = Array1.create int32 c_layout mem_size
-	  
+
     let memory_get i = memory.{Int32.to_int i}
-			 
+
     let memory_set i v = memory.{Int32.to_int i} <- v
 
     let read_word addr =
       DEBUG(prerr_string "reading word at ";prerr_string (Int32.to_string addr);prerr_newline();)
 	memory_get (Int32.shift_right addr 2)
-	
+
     let write_word addr v =
       DEBUG(prerr_string "writting word at ";prerr_string (Int32.to_string addr);prerr_string ": ";prerr_string (Int32.to_string v);prerr_newline();)
 	memory_set (Int32.shift_right addr 2) v
-	
+
     let read_byte =
       let shift = [|24;16;8;0|] in
 	function addr ->
-	  Int32.logand 
-	  (Int32.of_int 0xff) 
+	  Int32.logand
+	  (Int32.of_int 0xff)
 	  (Int32.shift_right_logical (read_word addr) (shift.(0x3 land (Int32.to_int addr))))
-	  
+
     let write_byte =
       let shift = [|24;16;8;0|] in
       let mask = [|0l;0l;0l;0l|] in
@@ -154,24 +144,24 @@ module Make(Code:Code) : Emulator =
 	done;
 	fun addr v ->
 	  let i = 0x3 land (Int32.to_int addr) in
-	    write_word addr 
-	      (Int32.logor 
+	    write_word addr
+	      (Int32.logor
 		 (Int32.logand (mask.(i)) (read_word addr))
 		 (Int32.shift_left (Int32.logand v (Int32.of_int 0xff)) (shift.(i))))
-	      
-      
-    type instruction = 
+
+
+    type instruction =
       | Add | Sub | Mul | Div | Cmp | Mod
       | And | Or | Xor | Bic
       | Lsh | Ash
       | Ldw | Ldb | Stw | Stb | Pop | Psh
       | Beq | Bne | Blt | Bge | Bgt | Ble
-      | Chk 
+      | Chk
       | Bsr | Jsr | Ret
       | Break | Sys
-	    
+
     type mode = R | I | IU | Rel | Abs | Other
-	
+
     let get_op_table =
       let instrs =
 	let arith = [0,Add; 1,Sub; 2,Mul; 3,Div; 4,Mod; 5,Cmp]
@@ -199,9 +189,9 @@ module Make(Code:Code) : Emulator =
 	  arith@log@sh@chk@mem@test@bsr@jsr@ret@brk@sysc
       in
       let size = 1 lsl 6 in
-      let ops = Array.create size (fun n -> raise (Error(Illegal))) in
-      let iadd a b = Int32.add a b 
-      and isub a b = Int32.sub a b 
+      let ops = Array.create size (fun _ -> raise (Error(Illegal))) in
+      let iadd a b = Int32.add a b
+      and isub a b = Int32.sub a b
       and imul a b = Int32.mul a b
       and idiv a b = Int32.div a b
       and imod a b = Int32.rem a b
@@ -248,7 +238,7 @@ module Make(Code:Code) : Emulator =
 		| Bge -> TESTOP((if int32_compare (register_get a) 0l >= 0 then c else Int32.one))
 		| Bgt -> TESTOP((if int32_compare (register_get a) 0l > 0 then c else Int32.one))
 		| Ble -> TESTOP((if int32_compare (register_get a) 0l <= 0 then c else Int32.one))
-		| Chk -> 
+		| Chk ->
 		    (match mode with
 		       | R ->
 			   (function n ->
@@ -280,23 +270,24 @@ module Make(Code:Code) : Emulator =
 				if ((int32_compare va 0l) >= 0) && ((int32_compare va c) < 0) then
 				  INCRPC(4l)
 				else
-				  raise (Error(ChkExn))))
+				  raise (Error(ChkExn)))
+		       | Rel | Abs | Other -> assert false)
 		| Bsr ->
 		    (fun n ->
 		       let c = Int32.logand n MASK_REL in
 		       let c = Int32.shift_right (Int32.shift_left c 11) 11 in (* 11 = 32 - 21 *)
 			 register_set 31l (Int32.add (!pc) 4l);
 			 INCRPC(Int32.mul c 4l))
-		| Jsr -> 
+		| Jsr ->
 		    (fun n ->
 		       register_set 31l (Int32.add (!pc) 4l);
 		       pc := Int32.mul (Int32.logand MASK_ABS n) 4l)
-		| Ret -> 
+		| Ret ->
 		    (fun n ->
 		       let a = Int32.logand (Int32.shift_right_logical n 21) MASK_REG in
 			 if int32_compare 0l a = 0 then raise (Error(Syscall(0l,0l,Risc.int_of_syscall Risc.Sys_exit)))
 			 else pc := register_get a)
-		| Break -> (fun n -> raise (Error(BrkExn)))
+		| Break -> (fun _ -> raise (Error(BrkExn)))
 		| Sys ->
 		    (fun n ->
 		       let c = Int32.logand n MASK_IMM in
@@ -329,12 +320,12 @@ module Make(Code:Code) : Emulator =
     let gc_init,gc_alloc =
       let align n = Int32.logand n 0xfffffffcl in
       let round n = align (Int32.add n 3l) in
-      let hp_address = ref 0l 
-      and hp_size = ref 0l 
+      let hp_address = ref 0l
+      and hp_size = ref 0l
       and hp_end = ref 0l
       and sp = ref 0l in
-      let alive_cells = ref Gcmap.empty 
-      and dead_cells = ref Gcmap.empty 
+      let alive_cells = ref Gcmap.empty
+      and dead_cells = ref Gcmap.empty
       and stack = Stack.create () in
       let new_cell sz b = { Gcmap.size = sz; Gcmap.live = b } in
       let dump_cells cells =
@@ -345,12 +336,12 @@ module Make(Code:Code) : Emulator =
 		      prerr_string (Int32.to_string c.Gcmap.size);
 		      prerr_newline()) cells
       in
-      let dump () =
+      let _dump () =
 	prerr_string "alive cells\n";
 	dump_cells !alive_cells;
 	prerr_string "dead cells\n";
 	dump_cells !dead_cells
-      in	
+      in
       let init hp sz reg =
 	if (int32_compare hp 0l < 0) || (int32_compare hp mem_size_int32 >= 0) then
 	  failwith ("out of bounds heap start: "^(Int32.to_string hp))
@@ -358,7 +349,7 @@ module Make(Code:Code) : Emulator =
 	  failwith ("out of bounds heap end: "^(Int32.to_string (Int32.add hp sz)))
 	else if (int32_compare sz 0l < 0) then
 	  failwith ("negative heap size: "^(Int32.to_string sz));
-	let sz = 
+	let sz =
 	  if int32_compare sz 0l = 0 then mem_size_int32
 	  else Int32.add sz hp
 	in
@@ -403,7 +394,7 @@ module Make(Code:Code) : Emulator =
 	  if verbose then prerr_string "[GC]no cell allocated\n";
 	  None
 	with
-	    Found(addr) -> 
+	    Found(addr) ->
 	      if verbose then
 		begin
 		  prerr_string "[GC]";
@@ -415,7 +406,7 @@ module Make(Code:Code) : Emulator =
 		end;
 	      Some(addr)
       in
-      let mark addr = 
+      let mark addr =
 	try
 	  let c = Gcmap.find addr !alive_cells in
 	    if not (c.Gcmap.live) then
@@ -424,16 +415,16 @@ module Make(Code:Code) : Emulator =
 		Stack.push (addr,c) stack
 	      end
 	with Not_found -> ()
-      and add_dead addr c = 
+      and add_dead addr c =
 	let addr2 = Int32.add addr c.Gcmap.size in
 	  dead_cells := Gcmap.add_or_join addr addr2 c !dead_cells
       in
-      let free () = 
+      let free () =
 	let usage1 = ref 0l in
-	  Gcmap.iter (fun addr c ->
+	  Gcmap.iter (fun _addr c ->
 			c.Gcmap.live <- false;
 			usage1 := Int32.add (!usage1) c.Gcmap.size) !alive_cells;
-	  let stk_address = 
+	  let stk_address =
 	    if int32_compare !sp 0l = 0 then (Int32.add !hp_address !hp_size)
 	    else register_get !sp
 	  in
@@ -487,7 +478,7 @@ module Make(Code:Code) : Emulator =
 	let sz = max 4l (round sz) in
 	  match lock sz with
 	    | Some(addr) -> addr
-	    | None -> 
+	    | None ->
 		begin
 		  free ();
 		  match lock sz with
@@ -496,7 +487,7 @@ module Make(Code:Code) : Emulator =
 		end
       in init,alloc
 
-    let tick () = 
+    let tick () =
       DEBUG(prerr_string "PC: ";prerr_string (Int32.to_string (!pc));prerr_newline();)
 	try
 	  let n = read_word (!pc) in
@@ -504,7 +495,7 @@ module Make(Code:Code) : Emulator =
 	    get_op_table.(opcode) (n)
 	with Error(Syscall(a,b,c)) ->
 	  (match Risc.syscall_of_int c with
-	     | Some(syscall) -> 
+	     | Some(syscall) ->
 		 (match syscall with
 		    | Risc.Sys_exit -> raise (Error(Exit(register_get a)))
 		    | Risc.Sys_io_wr_chr ->
@@ -514,7 +505,7 @@ module Make(Code:Code) : Emulator =
 		    | Risc.Sys_io_flush ->
 			Pervasives.flush stdout
 		    | Risc.Sys_io_rd_chr ->
-			let n = 
+			let n =
 			  try Pervasives.input_byte stdin
 			  with End_of_file -> -1
 			in
@@ -523,22 +514,21 @@ module Make(Code:Code) : Emulator =
 			register_set a (Int32.of_string (Pervasives.input_line stdin));
 		    | Risc.Sys_get_total_mem_size ->
 			register_set a mem_size_int32
-		    | Risc.Sys_gc_init -> 
+		    | Risc.Sys_gc_init ->
 			let ra = register_get a
 			and rb = register_get b in
 			let sz = Int32.shift_left (Int32.logand rb MASK_SZ) 2
 			and sp = Int32.shift_right_logical rb 27 in
 			  gc_init ra sz sp
-		    | Risc.Sys_gc_alloc -> 
+		    | Risc.Sys_gc_alloc ->
 			let sz = register_get b in
 			  register_set a (gc_alloc sz)
-		    | _ -> failwith "syscall not yet implemented"
 		 );
 		 INCRPC(4l)
 	     | None -> raise (Error(Illegal)))
-      
 
-    let exec () = 
+
+    let exec () =
       while true do
 	tick ()
       done

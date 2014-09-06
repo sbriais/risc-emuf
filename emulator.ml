@@ -1,12 +1,12 @@
 open Bigarray
 open Risc
 
-type error = 
-  | BusError of int 
+type error =
+  | BusError of int
   | InvalidReg
   | Illegal of int
-  | ChkError 
-  | BrkError 
+  | ChkError
+  | BrkError
   | Exit of Int32.t
 
 exception Error of error
@@ -28,7 +28,7 @@ let array_get t i =
 let array_set t i v =
   t.{i} <- v
 
-class gc = 
+class gc =
   let mask_align = Int32.shift_left (Int32.of_int 0x3fffffff) 2 in
   let three = Int32.of_int 3 in
   let four = Int32.of_int 4 in
@@ -49,7 +49,7 @@ object(self)
       failwith ("out of bounds heap end: "^(Int32.to_string (Int32.add hp sz)))
     else if (Int32.compare sz Int32.zero < 0) then
       failwith ("negative heap size: "^(Int32.to_string sz));
-    let sz = 
+    let sz =
       if Int32.compare sz Int32.zero = 0 then Int32.of_int emu#getMemSize
       else Int32.add sz hp
     in
@@ -84,7 +84,7 @@ object(self)
     let sz = max four (round sz) in
       match self#lock sz with
 	| Some(addr) -> addr
-	| None -> 
+	| None ->
 	    begin
 	      self#free emu;
 	    match self#lock sz with
@@ -102,10 +102,10 @@ object(self)
     with Not_found -> ()
   method private free emu =
     let usage1 = ref Int32.zero in
-      Gcmap.iter (fun addr c ->
+      Gcmap.iter (fun _addr c ->
 		      c.Gcmap.live <- false;
 		      usage1 := Int32.add (!usage1) c.Gcmap.size) alive_cells;
-      let stk_address = 
+      let stk_address =
 	if sp = 0 then (Int32.add hp_address hp_size)
 	else (emu#readReg sp)
       in
@@ -186,7 +186,7 @@ object(self)
       if verbose then prerr_string "[GC]no cell allocated\n";
       None
     with
-	Found(addr) -> 
+	Found(addr) ->
 	  if verbose then
 	    begin
 	      prerr_string "[GC]";
@@ -196,9 +196,9 @@ object(self)
 	    end;
 	  Some(addr)
 end
-and emulator = 
-  let create_memory mem_size = 
-    array_create mem_size 
+and emulator =
+  let create_memory mem_size =
+    array_create mem_size
 (*
     let mem = Array1.create int32 c_layout mem_size in
       for i = 0 to mem_size - 1 do
@@ -220,13 +220,13 @@ and emulator =
     | Xor -> Int32.logxor
     | Bic -> (fun a b -> Int32.logand a (Int32.lognot b))
   and int_op_of_sh_op = function
-    | Lsh -> (fun a b -> 
+    | Lsh -> (fun a b ->
 		let b = Int32.to_int b in
-		  if b > 0 then Int32.shift_left a b 
+		  if b > 0 then Int32.shift_left a b
 		  else Int32.shift_right_logical a (-b))
-    | Ash -> (fun a b -> 
+    | Ash -> (fun a b ->
 		let b = Int32.to_int b in
-		  if b > 0 then Int32.shift_left a b 
+		  if b > 0 then Int32.shift_left a b
 		  else Int32.shift_right a (-b))
   and cond_of_test_op = function
     | Beq -> (fun a -> Int32.compare a Int32.zero = 0)
@@ -238,12 +238,12 @@ and emulator =
   in
     fun code mem_size ->
 object(self)
-  val memory = create_memory mem_size 
+  val memory = create_memory mem_size
   val mutable pc = 0
   val registers = Array.make 32 (Int32.zero)
   val gc = new gc false
   method private init =
-    code#iter 
+    code#iter
       (fun i instr ->
 	 array_set memory i (Codec.code_instruction instr))
   method getMemSize = 4 * mem_size
@@ -272,7 +272,7 @@ object(self)
       self#writeWord ((adr lsr 2) lsl 2) w
   method getPC = pc
   method setPC pc' = pc <- pc'
-  method readReg n = 
+  method readReg n =
     if (0 <= n) && (n < 32) then registers.(n)
     else raise (Error(InvalidReg))
   method writeReg n w =
@@ -283,7 +283,7 @@ object(self)
     Codec.decode_instruction (self#readWord pc)
   method exec instr pc =
     let val_of_ic (Signed(f)) = Int32.of_int (f ())
-    and val_of_oc (Relative(f)) = f () 
+    and val_of_oc (Relative(f)) = f ()
     and val_of_lc (Absolute(f)) = f ()
     and val_of_ariiu = function
       | AR(R(n)) -> self#readReg n
@@ -294,13 +294,13 @@ object(self)
       | BI(Signed(f)) -> Int32.of_int (f ())
     in
       match instr with
-	| IArith(op,R(a),R(b),c) -> 
+	| IArith(op,R(a),R(b),c) ->
 	    self#writeReg a ((int_op_of_arith_op op) (self#readReg b) (val_of_ariiu c));
 	    pc + 4
-	| ILog(op,R(a),R(b),c) -> 
+	| ILog(op,R(a),R(b),c) ->
 	    self#writeReg a ((int_op_of_log_op op) (self#readReg b) (val_of_ariiu c));
 	    pc + 4
-	| ISh(op,R(a),R(b),c) -> 
+	| ISh(op,R(a),R(b),c) ->
 	    self#writeReg a ((int_op_of_sh_op op) (self#readReg b) (val_of_bri c));
 	    pc + 4
 	| IMem(Ldw,R(a),R(b),ic) ->
@@ -327,54 +327,54 @@ object(self)
 	    pc + 4 * (if cond_of_test_op op (self#readReg a) then val_of_oc oc else 1)
 	| Chk(R(a),c) ->
 	    let a = (self#readReg a) and c = val_of_ariiu c in
-	    if (Int32.compare a Int32.zero >= 0) && (Int32.compare a c) < 0 
+	    if (Int32.compare a Int32.zero >= 0) && (Int32.compare a c) < 0
 	    then pc + 4
 	    else raise (Error(ChkError))
 	| Bsr(oc) ->
 	    self#writeReg 31 (Int32.of_int (pc + 4));
 	    pc + 4 * (val_of_oc oc)
-	| Jsr(lc) -> 
+	| Jsr(lc) ->
 	    self#writeReg 31 (Int32.of_int (pc + 4));
 	    4 * (val_of_lc lc)
-	| Ret(R(a)) -> 
+	| Ret(R(a)) ->
 	    let a = Int32.to_int (self#readReg a) in
 	      if a = 0 then raise (Error(Exit(Int32.of_int a)))
 	      else a
 	| Break -> raise (Error(BrkError))
-	| Syscall(R(a),R(b),syscall) -> 
+	| Syscall(R(a),R(b),syscall) ->
 	    begin
 	      match syscall with
-		| Sys_io_rd_chr -> 
-		    let n = 
+		| Sys_io_rd_chr ->
+		    let n =
 		      try
 		       Char.code (Pervasives.input_char stdin)
 		      with
 			 End_of_file -> -1
 		    in
 		      self#writeReg a (Int32.of_int n)
-		| Sys_io_rd_int -> 
+		| Sys_io_rd_int ->
 		    let s = Pervasives.input_line stdin in
 		      self#writeReg a (Int32.of_string s)
-		| Sys_io_wr_chr -> 
+		| Sys_io_wr_chr ->
 		    let n = (Int32.to_int (self#readReg a)) land 0xff in
 		      Pervasives.output_char stdout (Char.chr n)
-		| Sys_io_wr_int -> 
+		| Sys_io_wr_int ->
 		    Pervasives.output_string stdout (Int32.to_string (self#readReg a))
-		| Sys_gc_init -> 
+		| Sys_gc_init ->
 		    let a = (self#readReg a) in
 		    let b = self#readReg b in
 		    let sz = (Int32.logand b (Int32.of_int 0x1ffffff))
 		    and sp = Int32.to_int (Int32.shift_right_logical b 27)
 		    in
 		      gc#init a (Int32.mul sz 4l) sp (self:>emulator)
-		| Sys_gc_alloc -> 
+		| Sys_gc_alloc ->
 		    let sz = (self#readReg b) in
 		      self#writeReg a (gc#alloc sz (self:>emulator))
-		| Sys_get_total_mem_size -> 
+		| Sys_get_total_mem_size ->
 		    self#writeReg a (Int32.of_int (self#getMemSize))
-		| Sys_io_flush -> 
+		| Sys_io_flush ->
 		    Pervasives.flush stdout
-		| Sys_exit -> 
+		| Sys_exit ->
 		    raise (Error(Exit(self#readReg a)))
 	    end;
 	    pc + 4

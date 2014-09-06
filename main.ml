@@ -2,21 +2,21 @@ let filename = ref ""
 
 let mem_size = ref 16000
 
-let fast = ref true 
+let fast = ref true
 
 let gui = ref false
 
 let dump = ref false
 
-let open_file filename = 
+let open_file filename =
   if filename = "--stdin" then stdin
   else Pervasives.open_in filename
 
 let _ =
-  let _ = Arg.parse 
+  let _ = Arg.parse
 	    ["-mem",Arg.Set_int(mem_size),"set memory size";
 	     "-slow",Arg.Clear(fast),"use slow emulator (legacy)";
-(* 	     "-gui",Arg.Set(gui),"use GUI"; *)
+(*	     "-gui",Arg.Set(gui),"use GUI"; *)
 	     "-dump",Arg.Set(dump),"just dump code";
 	     "--stdin",Arg.Unit(function () -> filename := "--stdin"),"use standard input";
 	    ]
@@ -32,18 +32,18 @@ let _ =
       begin
 	if !mem_size < code#getLen then
 	  failwith "not enough memory (use -mem flag to increase memory)";
- 	if !fast then 
+	if !fast then
 	  let module Emulator = Fast_emul.Make(struct
 						 let mem_size = !mem_size
 						 let code = code
 					       end)
-	  in 
-(* 	    if !gui then *)
-(* 	      begin *)
-(* 		let module Gui = Gui.Make(Emulator) in *)
-(* 		  Gui.exec () *)
-(* 	      end *)
-(* 	    else *)
+	  in
+(*	    if !gui then *)
+(*	      begin *)
+(*		let module Gui = Gui.Make(Emulator) in *)
+(*		  Gui.exec () *)
+(*	      end *)
+(*	    else *)
 	      begin
 		try
 		  Emulator.exec ()

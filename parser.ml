@@ -11,12 +11,13 @@ let accept_token scanner t =
     else raise (ParseError("expected token: "^(string_of_token t)^"\tfound:"^(string_of_token t')^" at "^(string_of_position scanner#getPosition)))
 
 let parse_int scanner =
-  let INT(n) = accept_token scanner (INT(Int32.zero)) in
-    Int32.to_int n
+  match accept_token scanner (INT(Int32.zero)) with
+  | INT n -> Int32.to_int n
+  | _ -> assert false
 
 let parse_register scanner =
   match scanner#currentToken with
-      REG(n) -> 
+      REG(n) ->
 	scanner#nextToken;
 	R(n)
     | _ ->
@@ -53,7 +54,7 @@ let parse_absolute scanner code =
 	let n = parse_int scanner in
 	  Absolute(freeze n)
 
-(* 
+(*
    E = T {(+|-) T}
    T = F0 {* F0}
    F0 = [-] F
@@ -73,14 +74,16 @@ let binop_of_token = function
   | BSHL -> binop_freeze (fun x n -> Int32.shift_left x (Int32.to_int n))
   | BSHR -> binop_freeze (fun x n -> Int32.shift_right_logical x (Int32.to_int n))
   | BASHR -> binop_freeze (fun x n -> Int32.shift_right x (Int32.to_int n))
+  | _ -> assert false
 
 let unop_of_token = function
   | MINUS -> unop_freeze Int32.neg
   | BNOT -> unop_freeze Int32.lognot
+  | _ -> assert false
 
 let gen_string str =
   let n = String.length str in
-  let getChar i = 
+  let getChar i =
     if i < n then Int32.of_int (Char.code str.[i])
     else 0l
   in
@@ -96,7 +99,7 @@ let gen_string str =
     else List.rev accu
   in aux 0 []
 
-let rec parse_expression scanner code = 
+let rec parse_expression scanner code =
   let rec aux expr =
     match scanner#currentToken with
 	PLUS | MINUS | BOR ->
@@ -116,18 +119,20 @@ and parse_term scanner code =
 	      aux (op term factor)
       | _ -> term
   in aux (parse_factor0 scanner code)
-and parse_factor0 scanner code = 
+and parse_factor0 scanner code =
   let factor = parse_factor1 scanner code in
     match scanner#currentToken with
 	BSHL | BSHR | BASHR ->
 	  let op = binop_of_token scanner#currentToken in
 	    scanner#nextToken;
-	    let INT(n) = accept_token scanner (INT(0l)) in
-	      op factor (freeze n)
+	    begin match accept_token scanner (INT(0l)) with
+	    | INT n -> op factor (freeze n)
+	    | _ -> assert false
+	    end
       | _ -> factor
 and parse_factor1 scanner code =
   match scanner#currentToken with
-      MINUS | BNOT -> 
+      MINUS | BNOT ->
 	let op = unop_of_token scanner#currentToken in
 	  scanner#nextToken;
 	  let factor = parse_factor scanner code in
@@ -152,11 +157,11 @@ let parse_int_expression scanner code =
   let e = parse_expression scanner code in
     (fun () -> (Int32.to_int (e ())))
 
-let parse_a_riiu_r scanner code = AR(parse_register scanner)
+let parse_a_riiu_r scanner _code = AR(parse_register scanner)
 let parse_a_riiu_i scanner code = AI(Signed(parse_int_expression scanner code))
 let parse_a_riiu_iu scanner code = AIU(Unsigned(parse_int_expression scanner code))
 
-let parse_b_ri_r scanner code = BR(parse_register scanner)
+let parse_b_ri_r scanner _code = BR(parse_register scanner)
 let parse_b_ri_i scanner code = BI(Signed(parse_int_expression scanner code))
 
 let arith_op_of_token = function
@@ -178,6 +183,7 @@ let arith_op_of_token = function
     | DIVIU -> Div,parse_a_riiu_iu
     | CMPIU -> Cmp,parse_a_riiu_iu
     | MODIU -> Mod,parse_a_riiu_iu
+    | _ -> assert false
 
 let log_op_of_token = function
     | AND -> And,parse_a_riiu_r
@@ -192,12 +198,14 @@ let log_op_of_token = function
     | ORIU -> Or,parse_a_riiu_iu
     | XORIU -> Xor,parse_a_riiu_iu
     | BICIU -> Bic,parse_a_riiu_iu
+    | _ -> assert false
 
 let sh_op_of_token = function
   | LSH -> Lsh,parse_b_ri_r
   | ASH -> Ash,parse_b_ri_r
   | LSHI -> Lsh,parse_b_ri_i
   | ASHI -> Ash,parse_b_ri_i
+  | _ -> assert false
 
 let mem_op_of_token = function
     LDW -> Ldw
@@ -206,6 +214,7 @@ let mem_op_of_token = function
   | STB -> Stb
   | PSH -> Psh
   | POP -> Pop
+  | _ -> assert false
 
 let test_op_of_token = function
     BEQ -> Beq
@@ -213,12 +222,14 @@ let test_op_of_token = function
   | BGT -> Bgt
   | BLE -> Ble
   | BGE -> Bge
-  | BLT -> Blt 
+  | BLT -> Blt
+  | _ -> assert false
 
 let chk_op_of_token = function
   | CHK -> (fun a c -> Chk(a,c)),parse_a_riiu_r
   | CHKI -> (fun a c -> Chk(a,c)),parse_a_riiu_i
   | CHKIU -> (fun a c -> Chk(a,c)),parse_a_riiu_iu
+  | _ -> assert false
 
 let parse_instruction scanner code =
   match scanner#currentToken with
@@ -310,16 +321,20 @@ let parse_instruction scanner code =
 	  [Data(e)]
     | ASCIIZ ->
 	scanner#nextToken;
-	let STRING(s) = accept_token scanner (STRING("")) in
-	  gen_string (s^"\000")
+	begin match accept_token scanner (STRING("")) with
+	| STRING s -> gen_string (s^"\000")
+	| _ -> assert false
+	end
     | ASCIIL ->
 	scanner#nextToken;
-	let STRING(s) = accept_token scanner (STRING("")) in
-	  gen_string ((String.make 1 (Char.chr (String.length s)))^s)
+	begin match accept_token scanner (STRING("")) with
+	| STRING s -> gen_string ((String.make 1 (Char.chr (String.length s)))^s)
+	| _ -> assert false
+	end
     | _ -> raise (ParseError("expected token: "^"a mnemonic"^"\tfound:"^(string_of_token scanner#currentToken)^" at "^(string_of_position scanner#getPosition)))
 
-let parse_program scanner = 
-  let rec aux code = 
+let parse_program scanner =
+  let rec aux code =
     match scanner#currentToken with
 	EOF -> code
       | IDENT(s) ->
@@ -327,7 +342,7 @@ let parse_program scanner =
 	  ignore (accept_token scanner COLON);
 	  code#setLabel s;
 	  aux code
-      | _ -> 
+      | _ ->
 	  List.iter code#emit (parse_instruction scanner code);
 	  aux code
   in aux (new code_generator)
