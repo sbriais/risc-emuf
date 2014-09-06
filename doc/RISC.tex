@@ -1,0 +1,154 @@
+% Ajouter les tailles de a, b, c, ic, uc, etc
+
+\documentclass[10pt,a4paper]{article}
+
+\usepackage{a4wide}
+
+\begin{document}
+
+\section{Instruction Set}
+\subsection{Register Instructions}
+
+\begin{tabular}{|l|l||l|l|}
+\hline
+\bf Instruction & \bf Signification & \bf Instruction & \bf Signification \\ \hline \hline
+
+\multicolumn{2}{|l||}{\bf integer addition} & \multicolumn{2}{|l|}{\bf integer multiplication} \\ \hline
+\verb#ADD   a b  c# & \verb#R.a = R.b + R.c#      & \verb#MUL   a b  c# & \verb#R.a = R.b * R.c# \\
+\verb#ADDI  a b ic# & \verb#R.a = R.b +  ic#      & \verb#MULI  a b ic# & \verb#R.a = R.b *  ic# \\
+\verb#ADDIU a b uc# & \verb#R.a = R.b +  uc#      & \verb#MULIU a b uc# & \verb#R.a = R.b *  uc# \\ \hline
+
+\multicolumn{2}{|l||}{\bf integer subtraction} & \multicolumn{2}{|l|}{\bf integer division} \\ \hline
+\verb#SUB   a b  c# & \verb#R.a = R.b - R.c#      & \verb#DIV   a b  c# & \verb#R.a = R.b / R.c# \\
+\verb#SUBI  a b ic# & \verb#R.a = R.b -  ic#      & \verb#DIVI  a b ic# & \verb#R.a = R.b /  ic# \\
+\verb#SUBIU a b uc# & \verb#R.a = R.b -  uc#      & \verb#DIVIU a b uc# & \verb#R.a = R.b /  uc# \\ \hline
+
+\multicolumn{2}{|l||}{\bf integer comparison} & \multicolumn{2}{|l|}{\bf integer modulo} \\ \hline
+\verb#CMP   a b  c# & \verb#R.a = cmp(R.b,R.c)# & \verb#MOD   a b  c# & \verb#R.a = R.b % R.c# \\
+\verb#CMPI  a b ic# & \verb#R.a = cmp(R.b, ic)# & \verb#MODI  a b ic# & \verb#R.a = R.b %  ic# \\
+\verb#CMPIU a b uc# & \verb#R.a = cmp(R.b, uc)# & \verb#MODIU a b uc# & \verb#R.a = R.b %  uc# \\ \hline
+
+\multicolumn{2}{|l||}{\bf logical or} & \multicolumn{2}{|l|}{\bf logical xor} \\ \hline
+\verb#OR    a b  c# & \verb#R.a = R.b | R.c# &   \verb#XOR   a b  c# & \verb#R.a = R.b ^ R.c#   \\
+\verb#ORI   a b ic# & \verb#R.a = R.b |  ic# &   \verb#XORI  a b ic# & \verb#R.a = R.b ^  ic#   \\
+\verb#ORIU  a b uc# & \verb#R.a = R.b |  uc# &   \verb#XORIU a b uc# & \verb#R.a = R.b ^  uc#   \\ \hline
+
+\multicolumn{2}{|l||}{\bf logical and} & \multicolumn{2}{|l|}{\bf logical bic} \\ \hline
+\verb#AND   a b  c# & \verb#R.a = R.b & R.c# &   \verb#BIC   a b  c# & \verb#R.a = R.b & ~R.c#   \\
+\verb#ANDI  a b ic# & \verb#R.a = R.b &  ic# &   \verb#BICI  a b ic# & \verb#R.a = R.b & ~ ic#   \\
+\verb#ANDIU a b uc# & \verb#R.a = R.b &  uc# &   \verb#BICIU a b uc# & \verb#R.a = R.b & ~ uc#   \\ \hline
+
+\multicolumn{2}{|l||}{\bf logical shift} & \multicolumn{2}{|l|}{\bf arithmetic shift} \\ \hline
+\verb#LSH   a b  c# & \verb#R.a = lsh(R.b,R.c) # & \verb#ASH   a b  c# & \verb#R.a = ash(R.b,R.c)#   \\
+\verb#LSHI  a b ic# & \verb#R.a = lsh(R.b, ic) # & \verb#ASHI  a b ic# & \verb#R.a = ash(R.b, ic)#   \\
+%\verb#            # & \verb#lsh(b,c) = c > 0 ? # & \verb#            # & \verb#ash(b,c) = c > 0 ?#   \\
+%\verb#            # & \verb#  b << c : b >>> -c# & \verb#            # & \verb#  b << c : b >> -c #   \\
+ \hline
+
+%ash(b,c) = (c > 0) ? (b << c) : (b > -c)
+\multicolumn{2}{|l||}{\bf bound check}  \\ \hline
+\verb#CHK   a    c# & \multicolumn{3}{|l|}{raise an error if not  \texttt{0 <= R.a < R.c}}   \\
+\verb#CHKI  a   ic# & \multicolumn{3}{|l|}{raise an error if not  \texttt{0 <= R.a <  ic}}   \\
+\verb#CHKIU a   uc# & \multicolumn{3}{|l|}{raise an error if not  \texttt{0 <= R.a <  uc}}   \\
+\hline
+
+\end{tabular}
+
+\noindent \verb## \\
+
+\noindent where \\
+\noindent
+\verb#  cmp(b,c) =# a value with the same sign as \verb#b - c# but with a possibly different magnitude \\
+\verb#  lsh(b,c) = c > 0 ? b << c : b >>> -c# \\
+\verb#  ash(b,c) = c > 0 ? b << c : b >> -c#
+
+\subsection{Load/Store Instructions}
+\begin{tabular}{|l|l|l|l|}
+\hline
+\bf Instruction & \bf Signification & \bf Description \\ \hline \hline
+\verb#LDW a b ic # & \verb#R.a = <word at address R.b + ic>       # & load word  \\ \hline
+\verb#LDB a b ic # & \verb#R.a = <byte at address R.b + ic>       # & load byte  \\ \hline
+\verb#POP a b ic # & \verb#R.a = <word at address R.b>            # & pop word   \\
+\verb#           # & \verb#R.b = R.b + ic                         # &            \\ \hline
+\verb#STW a b ic # & \verb#<word at address R.b + ic> = R.a       # & store word \\ \hline
+\verb#STB a b ic # & \verb#<byte at address R.b + ic> = (byte)R.a # & store byte \\ \hline
+\verb#PSH a b ic # & \verb#R.b = R.b - ic                         # & push word  \\
+\verb#           # & \verb#<word at address R.b> = R.a            # &            \\ \hline
+\end{tabular}
+\subsection{Control Instructions}
+
+\begin{tabular}{|l|l|l|l|}
+\hline
+\bf Instruction & \bf Signification & \bf Description \\ \hline \hline
+\verb#BEQ a oc# & \verb#PC += 4 * (R.a == 0 ? oc : 1)# & branch if equal            \\ \hline
+\verb#BNE a oc# & \verb#PC += 4 * (R.a != 0 ? oc : 1)# & branch if not equal        \\ \hline
+\verb#BLT a oc# & \verb#PC += 4 * (R.a <  0 ? oc : 1)# & branch if less than        \\ \hline
+\verb#BGE a oc# & \verb#PC += 4 * (R.a >= 0 ? oc : 1)# & branch if greater or equal \\ \hline
+\verb#BLE a oc# & \verb#PC += 4 * (R.a <= 0 ? oc : 1)# & branch if less or equal    \\ \hline
+\verb#BGT a oc# & \verb#PC += 4 * (R.a >  0 ? oc : 1)# & branch if greater than     \\ \hline
+\verb#BSR   oc# & \verb#R.31 = PC + 4                # & branch to subroutine       \\
+\verb#        # & \verb#PC += 4 * oc                 # &                            \\ \hline
+\verb#JSR   lc# & \verb#R.31 = PC + 4                # & jump to subroutine         \\
+\verb#        # & \verb#PC  = 4 * lc                 # &                            \\ \hline
+\verb#RET    c# & \verb#PC  = R.c                    # & jump to return address     \\ \hline
+\end{tabular}
+
+\subsection{Miscellaneous Instructions}
+
+\begin{tabular}{|l|l|l|l|}
+\hline
+\bf Instruction & \bf Signification & Description \\ \hline \hline
+\verb#BREAK         # & \verb#<break execution># & break execution \\ \hline
+\verb#SYSCALL a b uc# & \verb#R.a = SYS_uc(R.a,R.b)# & invoke a system function \\ \hline
+\end{tabular}
+
+\section{System Calls}
+
+\begin{tabular}{|l|l|l|l|}
+\hline
+$\sharp$ & \bf Instruction & \bf Signification \\ \hline \hline
+
+1 & \verb#SYSCALL a 0 SYS_IO_RD_CHR# & \verb#R.a =# Unicode of read character or -1 if \verb#EOF# \\ \hline
+2 & \verb#SYSCALL a 0 SYS_IO_RD_INT# & \verb#R.a =# value of read integer \\ \hline \hline
+
+6 & \verb#SYSCALL a 0 SYS_IO_WR_CHR# & write character with Unicode \verb#R.a# \\ \hline
+7 & \verb#SYSCALL a 0 SYS_IO_WR_INT# & write signed value \verb#R.a# in decimal format \\ \hline \hline
+
+15 & \verb#SYSCALL 0 0 SYS_IO_FLUSH# & flush the output stream \\ \hline \hline
+
+11 & \verb#SYSCALL a b SYS_GC_INIT# & initialize the garbage collector \\ \hline
+12 & \verb#SYSCALL a b SYS_GC_ALLOC# & \verb#R.a =# address of a newly allocated block of \verb#R.b# bytes \\ \hline \hline
+
+13 & \verb#SYSCALL a 0 SYS_GET_TOTAL_MEM_SIZE# & \verb#R.a =# total memory size in bytes \\ \hline \hline
+
+19 & \verb#SYSCALL a 0 SYS_EXIT# & terminates the emulation with status code \verb#R.a# \\ \hline 
+\end{tabular}
+
+\section{Constants}
+
+\begin{tabular}{|l|l|l|}
+\hline
+\bf Notation & \bf Size & \bf Signification \\ \hline \hline
+\verb/a/, \verb/b/, \verb/c/ & 5 bits & Register number \\
+\verb/ic/ & 16 bits & Signed integer \\
+\verb/uc/ & 16 bits & Unsigned integer \\
+\verb/oc/ & 21 bits & Signed displacement \\
+\verb/lc/ & 26 bits & Absolute address \\
+\hline
+\end{tabular}
+
+\section{Registers}
+\noindent 
+The \verb/DLX/ processor has 32 registers which are 32 bits large.
+
+\noindent
+The register \verb/R0/ is always equal to $0$ and is immutable.
+
+\noindent
+The register \verb/R31/ is used to save the return address (\verb/BSR/ and \verb/JSR/).
+
+\noindent
+By convention, \verb/R1/ is used to store the result of a function
+call and \verb/R30/ is the stack pointer.
+
+\end{document}
