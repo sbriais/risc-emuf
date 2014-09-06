@@ -55,10 +55,11 @@ module Make(Code:Code) : Emulator =
       registers.(Int32.to_int i)
 			   
     let register_set i v =
-     (* prerr_string "setting register ";prerr_string (Int32.to_string i);prerr_string " to value ";prerr_string (Int32.to_string v);prerr_newline(); *)
-(*      if int32_compare i Int32.zero <> 0 then *)
-      registers.(Int32.to_int i) <- v;
-      registers.(0) <- Int32.zero
+      (* prerr_string "setting register ";prerr_string (Int32.to_string i);prerr_string " to value ";prerr_string (Int32.to_string v);prerr_newline(); *)
+      let i = Int32.to_int i in
+	if i > 0 then registers.(i) <- v
+	  (*      if int32_compare i Int32.zero <> 0 then 
+		  registers.(Int32.to_int i) <- v; *)
 	  
     let mem_size = Code.mem_size
 
