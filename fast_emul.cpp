@@ -2,6 +2,8 @@
 
 #define DEBUG(e) 
 
+#define INCRPC(i) pc := Int32.add (i) (!pc)
+
 #define INTOP(op) \
   (match mode with | R -> (function n -> \
   let c = Int32.logand n mask_reg in \
@@ -10,7 +12,7 @@
   let n = Int32.shift_right_logical n 5 in \
   let a = Int32.logand n mask_reg in \
   register_set a (op (register_get b) (register_get c)); \
-  pc := Int32.add (!pc) four) \
+  INCRPC(four)) \
   | I -> \
   (function n -> \
   let c = Int32.logand n mask_imm in \
@@ -20,7 +22,7 @@
   let n = Int32.shift_right_logical n 5 in \
   let a = Int32.logand n mask_reg in \
   register_set a (op (register_get b) c); \
-  pc := Int32.add (!pc) four) \
+  INCRPC(four)) \
   | IU -> \
   (function n -> \
   let c = Int32.logand n mask_imm in \
@@ -29,18 +31,18 @@
   let n = Int32.shift_right_logical n 5 in \
   let a = Int32.logand n mask_reg in \
   register_set a (op (register_get b) c); \
-  pc := Int32.add (!pc) four))
+  INCRPC(four)))
 
 #define MEMOP(op) \
   (fun n -> \
-   let c = Int32.logand mask_imm n in \
-   let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *) \
-   let n = Int32.shift_right_logical n 16 in \
-   let b = Int32.logand mask_reg n in \
-   let n = Int32.shift_right_logical n 5 in \
-   let a = Int32.logand mask_reg n in \
-   op; \
-   pc := Int32.add (!pc) four) 
+  let c = Int32.logand mask_imm n in \
+  let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *) \
+  let n = Int32.shift_right_logical n 16 in \
+  let b = Int32.logand mask_reg n in \
+  let n = Int32.shift_right_logical n 5 in \
+  let a = Int32.logand mask_reg n in \
+  op; \
+  INCRPC(four)) 
 
 #define TESTOP(op) \
   (fun n -> \
@@ -48,7 +50,7 @@
   let c = Int32.shift_right (Int32.shift_left c 11) 11 in (* 11 = 32 - 21 *) \
   let n = Int32.shift_right_logical n 21 in \
   let a = Int32.logand n mask_reg in \
-  pc := Int32.add (Int32.mul op four) (!pc))
+  INCRPC(Int32.mul op four))
 
 *)
 
@@ -258,7 +260,7 @@ module Make(Code:Code) : Emulator =
 			      let a = Int32.logand n mask_reg in
 			      let va = register_get a in
 				if ((int32_compare va Int32.zero) >= 0) && ((int32_compare va (register_get c)) < 0) then
-				  pc := Int32.add (!pc) four
+				  INCRPC(four)
 				else
 				  raise (Error(ChkExn)))
 		       | I ->
@@ -269,7 +271,7 @@ module Make(Code:Code) : Emulator =
 			      let a = Int32.logand n mask_reg in
 			      let va = register_get a in
 				if ((int32_compare va Int32.zero) >= 0) && ((int32_compare va c) < 0) then
-				  pc := Int32.add (!pc) four
+				  INCRPC(four)
 				else
 				  raise (Error(ChkExn)))
 		       | IU ->
@@ -279,7 +281,7 @@ module Make(Code:Code) : Emulator =
 			      let a = Int32.logand n mask_reg in
 			      let va = register_get a in
 				if ((int32_compare va Int32.zero) >= 0) && ((int32_compare va c) < 0) then
-				  pc := Int32.add four (!pc)
+				  INCRPC(four)
 				else
 				  raise (Error(ChkExn))))
 		| Bsr ->
@@ -287,7 +289,7 @@ module Make(Code:Code) : Emulator =
 		       let c = Int32.logand n mask_rel in
 		       let c = Int32.shift_right (Int32.shift_left c 11) 11 in (* 11 = 32 - 21 *)
 			 register_set thirty_one (Int32.add (!pc) four);
-			 pc := Int32.add (!pc) (Int32.mul c four))
+			 INCRPC(Int32.mul c four))
 		| Jsr -> 
 		    (fun n ->
 		       register_set thirty_one (Int32.add (!pc) four);
@@ -394,7 +396,7 @@ module Make(Code:Code) : Emulator =
 			    register_set a (gc_alloc sz)
 		      | _ -> failwith "syscall not yet implemented"
 		   );
-		   pc := Int32.add four (!pc)
+		   INCRPC(four)
 	       | None -> raise (Error(Illegal)))
 	done
   end
