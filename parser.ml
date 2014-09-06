@@ -200,7 +200,7 @@ let parse_instruction scanner code =
 	  let ra = parse_register scanner in
 	  let rb = parse_register scanner in
 	  let rc = third scanner code in
-	    IArith(op,ra,rb,rc)
+	    [IArith(op,ra,rb,rc)]
     | AND | ANDI | ANDIU
     | OR | ORI | ORIU
     | XOR | XORI | XORIU
@@ -210,7 +210,7 @@ let parse_instruction scanner code =
 	  let ra = parse_register scanner in
 	  let rb = parse_register scanner in
 	  let rc = third scanner code in
-	    ILog(op,ra,rb,rc)
+	    [ILog(op,ra,rb,rc)]
     | LSH | LSHI
     | ASH | ASHI ->
 	let (op,third) = sh_op_of_token scanner#currentToken in
@@ -218,7 +218,7 @@ let parse_instruction scanner code =
 	  let ra = parse_register scanner in
 	  let rb = parse_register scanner in
 	  let rc = third scanner code in
-	    ISh(op,ra,rb,rc)
+	    [ISh(op,ra,rb,rc)]
     | LDW
     | LDB
     | STW
@@ -230,7 +230,7 @@ let parse_instruction scanner code =
 	  let ra = parse_register scanner in
 	  let rb = parse_register scanner in
 	  let rc = Signed(parse_int_expression scanner code) in
-	    IMem(op,ra,rb,rc)
+	    [IMem(op,ra,rb,rc)]
     | BEQ
     | BNE
     | BLT
@@ -241,40 +241,59 @@ let parse_instruction scanner code =
 	  scanner#nextToken;
 	  let ra = parse_register scanner in
 	  let rc = parse_relative scanner code in
-	    ITest(op,ra,rc)
+	    [ITest(op,ra,rc)]
     | CHK | CHKI | CHKIU ->
 	let chk,second = chk_op_of_token scanner#currentToken in
 	  scanner#nextToken;
 	  let ra = parse_register scanner in
 	  let rc = second scanner code in
-	    chk ra rc
+	    [chk ra rc]
     | BSR ->
 	scanner#nextToken;
 	let rc = parse_relative scanner code in
-	  Bsr(rc)
+	  [Bsr(rc)]
     | JSR ->
 	scanner#nextToken;
 	let rc = parse_absolute scanner code in
-	  Jsr(rc)
+	  [Jsr(rc)]
     | RET ->
 	scanner#nextToken;
 	let ra = parse_register scanner in
-	  Ret(ra)
+	  [Ret(ra)]
     | BREAK ->
 	scanner#nextToken;
-	Break
+	[Break]
     | SYSCALL ->
 	scanner#nextToken;
 	let ra = parse_register scanner in
 	let rb = parse_register scanner in
 	let n = parse_int scanner in
 	  (match syscall_of_int n with
-	       Some(syscall) -> Syscall(ra,rb,syscall)
+	       Some(syscall) -> [Syscall(ra,rb,syscall)]
 	     | None -> raise (ParseError("unknown syscall: "^(string_of_int n))))
     | DATA ->
 	scanner#nextToken;
-	let e = parse_expression scanner code in
-	  Data(e)
+	(match scanner#currentToken with
+	  | STRING(s) -> 
+	      scanner#nextToken;
+	      let n = String.length s in
+	      let l = ref [] in
+	      let len = 4 * ((n+4) / 4) in
+	      let i = ref 0 in
+		while !i < len do
+		  let v = ref 0l in
+		    for j = 0 to 3 do
+		      let c = Int32.of_int (Char.code (if !i < n then s.[!i] else '\000')) in
+			incr i;
+			v := Int32.shift_left (!v) 8;
+			v := Int32.logor (!v) c
+		    done;
+		    l := Data(fun () -> !v)::!l
+		done;
+		List.rev (!l)
+	  | _ -> 
+	      let e = parse_expression scanner code in
+		[Data(e)])
     | _ -> raise (ParseError("expected token: "^"a mnemonic"^"\tfound:"^(string_of_token scanner#currentToken)^" at "^(string_of_position scanner#getPosition)))
 
 let parse_program scanner = 
@@ -287,6 +306,6 @@ let parse_program scanner =
 	  code#setLabel s;
 	  aux code
       | _ -> 
-	  code#emit (parse_instruction scanner code);
+	  List.iter code#emit (parse_instruction scanner code);
 	  aux code
   in aux (new code_generator)

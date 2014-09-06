@@ -6,6 +6,7 @@ module Tokens =
 	    (* tokens classiques *)
       | INT of Int32.t
       | IDENT of string
+      | STRING of string
       | PLUS
       | MINUS
       | MULT
@@ -51,6 +52,7 @@ module Tokens =
 	| BAD(_),BAD(_) -> 0
 	| INT(_),INT(_) -> 0
 	| IDENT(_),IDENT(_) -> 0
+	| STRING(_),STRING(_) -> 0
 	| _,_ -> Pervasives.compare t t'
 	    
     let keywords = 
@@ -104,6 +106,7 @@ module Tokens =
       | BAD(c) -> "<bad:"^(String.make 1 c)^">"
       | EOF -> "<eof>"
       | IDENT(s) -> "IDENT"
+      | STRING(s) -> "STRING"
       | INT(n) -> "INT"
       | PLUS -> "+"
       | MINUS -> "-"
@@ -175,7 +178,9 @@ class scanner =
   in 
   let ( ||| ) f f' c = (f c) || (f' c) 
   and ( === ) c c' = isChar c' c
+  and isNot f c = not (f c)
   in
+  let isEof = function None -> true | _ -> false in
   let isDigit = function
       None -> false
     | Some(c) -> (match c with '0'..'9' -> true | _ -> false)
@@ -243,6 +248,17 @@ object(self)
 	  | Some('(') -> acceptToken LPAREN
 	  | Some(')') -> acceptToken RPAREN
 	  | Some(':') -> acceptToken COLON
+	  | Some('"') -> 
+	      chars#nextChar;
+              let isPrematureEnd = isEof ||| (isChar '\n') in
+              let string = string_such_that (isNot ((isChar '"') ||| isPrematureEnd)) in
+                if isPrematureEnd chars#currentChar then
+                  failwith "unterminated string"
+                else
+                  begin
+                    chars#nextChar;
+                    STRING(string)
+                  end
 	  | c when isLetter(c) ->
 	      let string = string_such_that (isLetter ||| isDigit ||| (isChar '_')) in
 		begin
