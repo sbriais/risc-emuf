@@ -56,8 +56,9 @@ module Make(Code:Code) : Emulator =
 			   
     let register_set i v =
      (* prerr_string "setting register ";prerr_string (Int32.to_string i);prerr_string " to value ";prerr_string (Int32.to_string v);prerr_newline(); *)
-      if int32_compare Int32.zero i <> 0 then
-	registers.(Int32.to_int i) <- v
+(*      if int32_compare i Int32.zero <> 0 then *)
+      registers.(Int32.to_int i) <- v;
+      registers.(0) <- Int32.zero
 	  
     let mem_size = Code.mem_size
 
@@ -146,17 +147,19 @@ module Make(Code:Code) : Emulator =
       let mask_reg = Int32.of_int 0x1f 
       and mask_imm = Int32.of_int 0xffff 
       and mask_rel = Int32.of_int 0x1fffff
-      and mask_abs = Int32.of_int 0x3ffffff
-      and mask_sign_imm = Int32.of_int 0x8000 
-      and ext_sign_imm = Int32.shift_left (Int32.of_int 0xffff) 16 
-      and mask_sign_rel = Int32.of_int 0x100000 
-      and ext_sign_rel = Int32.shift_left (Int32.of_int 0x7ff) 21 in
+      and mask_abs = Int32.of_int 0x3ffffff in
+(*
+  let mask_sign_imm = Int32.of_int 0x8000 
+  and ext_sign_imm = Int32.shift_left (Int32.of_int 0xffff) 16 
+  and mask_sign_rel = Int32.of_int 0x100000 
+  and ext_sign_rel = Int32.shift_left (Int32.of_int 0x7ff) 21 in
+*)
       let iadd a b = Int32.add a b 
       and isub a b = Int32.sub a b 
       and imul a b = Int32.mul a b
       and idiv a b = Int32.div a b
       and imod a b = Int32.rem a b
-      and icmp a b = Int32.of_int (int32_compare a b)
+      and icmp a b = Int32.sub (Int32.sub a b) (Int32.sub b a)
       and iand a b = Int32.logand a b
       and ior a b = Int32.logor a b
       and ixor a b = Int32.logxor a b
@@ -183,7 +186,8 @@ module Make(Code:Code) : Emulator =
 	| I ->
 	    (function n ->
 	       let c = Int32.logand n mask_imm in
-	       let c = if int32_compare (Int32.logand c mask_sign_imm) Int32.zero <> 0 then Int32.logor c ext_sign_imm else c in
+		 (* let c = if int32_compare (Int32.logand c mask_sign_imm) Int32.zero <> 0 then Int32.logor c ext_sign_imm else c in *)
+	       let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *)
 	       let n = Int32.shift_right_logical n 16 in
 	       let b = Int32.logand n mask_reg in
 	       let n = Int32.shift_right_logical n 5 in
@@ -203,7 +207,8 @@ module Make(Code:Code) : Emulator =
       let test_op iop =
 	(fun n ->
 	   let c = Int32.logand n mask_rel in
-	   let c = if int32_compare (Int32.logand c mask_sign_rel) Int32.zero <> 0 then Int32.logor c ext_sign_rel else c in
+	     (* let c = if int32_compare (Int32.logand c mask_sign_rel) Int32.zero <> 0 then Int32.logor c ext_sign_rel else c in *)
+	   let c = Int32.shift_right (Int32.shift_left c 11) 11 in (* 11 = 32 - 21 *)
 	   let n = Int32.shift_right_logical n 21 in
 	   let a = Int32.logand n mask_reg in
 	     pc := Int32.add (Int32.mul (iop (register_get a) c) four) (!pc))
@@ -228,7 +233,8 @@ module Make(Code:Code) : Emulator =
 		| Ldw -> 
 		    (function n ->
 		       let c = Int32.logand mask_imm n in
-		       let c = if int32_compare Int32.zero (Int32.logand mask_sign_imm c) <> 0 then Int32.logor ext_sign_imm c else c in
+			 (* let c = if int32_compare (Int32.logand c mask_sign_imm) Int32.zero <> 0 then Int32.logor c ext_sign_imm else c in *)
+		       let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *)
 		       let n = Int32.shift_right_logical n 16 in
 		       let b = Int32.logand mask_reg n in
 		       let n = Int32.shift_right_logical n 5 in
@@ -238,7 +244,8 @@ module Make(Code:Code) : Emulator =
 		| Ldb -> 
 		    (function n ->
 		       let c = Int32.logand mask_imm n in
-		       let c = if int32_compare Int32.zero (Int32.logand mask_sign_imm c) <> 0 then Int32.logor ext_sign_imm c else c in
+			 (* let c = if int32_compare (Int32.logand c mask_sign_imm) Int32.zero <> 0 then Int32.logor c ext_sign_imm else c in *)
+		       let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *)
 		       let n = Int32.shift_right_logical n 16 in
 		       let b = Int32.logand mask_reg n in
 		       let n = Int32.shift_right_logical n 5 in
@@ -248,7 +255,8 @@ module Make(Code:Code) : Emulator =
 		| Stw -> 
 		    (function n ->
 		       let c = Int32.logand mask_imm n in
-		       let c = if int32_compare Int32.zero (Int32.logand mask_sign_imm c) <> 0 then Int32.logor ext_sign_imm c else c in
+			 (* let c = if int32_compare (Int32.logand c mask_sign_imm) Int32.zero <> 0 then Int32.logor c ext_sign_imm else c in *)
+		       let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *)
 		       let n = Int32.shift_right_logical n 16 in
 		       let b = Int32.logand mask_reg n in
 		       let n = Int32.shift_right_logical n 5 in
@@ -258,7 +266,8 @@ module Make(Code:Code) : Emulator =
 		| Stb -> 
 		    (function n ->
 		       let c = Int32.logand mask_imm n in
-		       let c = if int32_compare Int32.zero (Int32.logand mask_sign_imm c) <> 0 then Int32.logor ext_sign_imm c else c in
+			 (* let c = if int32_compare (Int32.logand c mask_sign_imm) Int32.zero <> 0 then Int32.logor c ext_sign_imm else c in *)
+		       let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *)
 		       let n = Int32.shift_right_logical n 16 in
 		       let b = Int32.logand mask_reg n in
 		       let n = Int32.shift_right_logical n 5 in
@@ -268,7 +277,8 @@ module Make(Code:Code) : Emulator =
 		| Pop ->
 		    (function n ->
 		       let c = Int32.logand mask_imm n in
-		       let c = if int32_compare Int32.zero (Int32.logand mask_sign_imm c) <> 0 then Int32.logor ext_sign_imm c else c in
+			 (* let c = if int32_compare (Int32.logand c mask_sign_imm) Int32.zero <> 0 then Int32.logor c ext_sign_imm else c in *)
+		       let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *)
 		       let n = Int32.shift_right_logical n 16 in
 		       let b = Int32.logand mask_reg n in
 		       let n = Int32.shift_right_logical n 5 in
@@ -279,7 +289,8 @@ module Make(Code:Code) : Emulator =
 		| Psh -> 
 		    (function n ->
 		       let c = Int32.logand mask_imm n in
-		       let c = if int32_compare Int32.zero (Int32.logand mask_sign_imm c) <> 0 then Int32.logor ext_sign_imm c else c in
+			 (* let c = if int32_compare (Int32.logand c mask_sign_imm) Int32.zero <> 0 then Int32.logor c ext_sign_imm else c in *)
+		       let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *)
 		       let n = Int32.shift_right_logical n 16 in
 		       let b = Int32.logand mask_reg n in
 		       let n = Int32.shift_right_logical n 5 in
@@ -308,7 +319,8 @@ module Make(Code:Code) : Emulator =
 		       | I ->
 			   (function n ->
 			      let c = Int32.logand n mask_imm in
-			      let c = if int32_compare Int32.zero (Int32.logand mask_sign_imm c) <> 0 then Int32.logor ext_sign_imm c else c in
+				(* let c = if int32_compare (Int32.logand c mask_sign_imm) Int32.zero <> 0 then Int32.logor c ext_sign_imm else c in *)
+			      let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *)
 			      let n = Int32.shift_right_logical n 21 in
 			      let a = Int32.logand n mask_reg in
 			      let va = register_get a in
@@ -329,7 +341,8 @@ module Make(Code:Code) : Emulator =
 		| Bsr ->
 		    (fun n ->
 		       let c = Int32.logand n mask_rel in
-		       let c = if int32_compare (Int32.logand c mask_sign_rel) Int32.zero <> 0 then Int32.logor c ext_sign_rel else c in
+			 (* let c = if int32_compare (Int32.logand c mask_sign_rel) Int32.zero <> 0 then Int32.logor c ext_sign_rel else c in *)
+		       let c = Int32.shift_right (Int32.shift_left c 11) 11 in (* 11 = 32 - 21 *)
 			 register_set thirty_one (Int32.add (!pc) four);
 			 pc := Int32.add (!pc) (Int32.mul c four))
 		| Jsr -> 
