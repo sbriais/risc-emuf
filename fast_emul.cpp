@@ -416,8 +416,8 @@ module Make(Code:Code) : Emulator =
 	      end
 	with Not_found -> ()
       and add_dead addr c = 
-	let addr' = Int32.add addr c.Gcmap.size in
-	  dead_cells := Gcmap.add_or_join addr addr' c !dead_cells
+	let addr2 = Int32.add addr c.Gcmap.size in
+	  dead_cells := Gcmap.add_or_join addr addr2 c !dead_cells
       in
       let free () = 
 	let usage1 = ref 0l in
