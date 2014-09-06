@@ -429,7 +429,7 @@ module Make(Code:Code) : Emulator =
 		    | Risc.Sys_gc_alloc -> 
 			let sz = Int32.to_int (register_get b) in
 			  register_set a (Int32.of_int (gc_alloc sz))
-		    | _ -> ()
+		    | _ -> failwith "syscall not yet implemented"
 		 );
 		 pc := Int32.add four (!pc)
 	     | None -> raise (Error(Illegal)))
