@@ -1,55 +1,61 @@
 (*
 
+#define MASK_SZ 0x1ffffffl
+#define MASK_REG 0x1fl
+#define MASK_IMM 0xffffl
+#define MASK_REL 0x1fffffl
+#define MASK_ABS 0x3ffffffl
+
 #define DEBUG(e) 
 
 #define INCRPC(i) pc := Int32.add (i) (!pc)
 
 #define INTOP(op) \
   (match mode with | R -> (function n -> \
-  let c = Int32.logand n mask_reg in \
+  let c = Int32.logand n MASK_REG in \
   let n = Int32.shift_right_logical n 16 in \
-  let b = Int32.logand n mask_reg in \
+  let b = Int32.logand n MASK_REG in \
   let n = Int32.shift_right_logical n 5 in \
-  let a = Int32.logand n mask_reg in \
+  let a = Int32.logand n MASK_REG in \
   register_set a (op (register_get b) (register_get c)); \
   INCRPC(4l)) \
   | I -> \
   (function n -> \
-  let c = Int32.logand n mask_imm in \
+  let c = Int32.logand n MASK_IMM in \
   let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *) \
   let n = Int32.shift_right_logical n 16 in \
-  let b = Int32.logand n mask_reg in \
+  let b = Int32.logand n MASK_REG in \
   let n = Int32.shift_right_logical n 5 in \
-  let a = Int32.logand n mask_reg in \
+  let a = Int32.logand n MASK_REG in \
   register_set a (op (register_get b) c); \
   INCRPC(4l)) \
   | IU -> \
   (function n -> \
-  let c = Int32.logand n mask_imm in \
+  let c = Int32.logand n MASK_IMM in \
   let n = Int32.shift_right_logical n 16 in \
-  let b = Int32.logand n mask_reg in \
+  let b = Int32.logand n MASK_REG in \
   let n = Int32.shift_right_logical n 5 in \
-  let a = Int32.logand n mask_reg in \
+  let a = Int32.logand n MASK_REG in \
   register_set a (op (register_get b) c); \
   INCRPC(4l)))
 
 #define MEMOP(op) \
   (fun n -> \
-  let c = Int32.logand mask_imm n in \
+  let c = Int32.logand MASK_IMM n in \
   let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *) \
   let n = Int32.shift_right_logical n 16 in \
-  let b = Int32.logand mask_reg n in \
+  let b = Int32.logand MASK_REG n in \
   let n = Int32.shift_right_logical n 5 in \
-  let a = Int32.logand mask_reg n in \
+  let a = Int32.logand MASK_REG n in \
   op; \
   INCRPC(4l)) 
 
 #define TESTOP(op) \
   (fun n -> \
-  let c = Int32.logand n mask_rel in \
+  let c = Int32.logand n MASK_REL in \
   let c = Int32.shift_right (Int32.shift_left c 11) 11 in (* 11 = 32 - 21 *) \
   let n = Int32.shift_right_logical n 21 in \
-  let a = Int32.logand n mask_reg in \
+  let a = Int32.logand n MASK_REG in \
   INCRPC(Int32.mul op 4l))
 
 *)
@@ -68,12 +74,15 @@ module type Emulator =
       
     exception Error of error
 
+    val mem_size : int 
     val register_get : Int32.t -> Int32.t
     val register_set : Int32.t -> Int32.t -> unit
     val read_word : Int32.t -> Int32.t
     val write_word : Int32.t -> Int32.t -> unit
     val getPC : unit -> Int32.t
     val setPC : Int32.t -> unit
+    val reset : unit -> unit
+    val tick : unit -> unit
     val exec : unit -> unit
   end
 
@@ -116,12 +125,7 @@ module Make(Code:Code) : Emulator =
 
     let mem_size_int32 = Int32.mul 4l (Int32.of_int mem_size)
 		     
-    let memory =
-      let res = Array1.create int32 c_layout mem_size in
-	for i = 0 to mem_size - 1 do
-	  res.{i} <- 0l
-	done;
-	res
+    let memory = Array1.create int32 c_layout mem_size
 	  
     let memory_get i = memory.{Int32.to_int i}
 			 
@@ -196,10 +200,6 @@ module Make(Code:Code) : Emulator =
       in
       let size = 1 lsl 6 in
       let ops = Array.create size (fun n -> raise (Error(Illegal))) in
-      let mask_reg = Int32.of_int 0x1f 
-      and mask_imm = Int32.of_int 0xffff 
-      and mask_rel = Int32.of_int 0x1fffff
-      and mask_abs = Int32.of_int 0x3ffffff in
       let iadd a b = Int32.add a b 
       and isub a b = Int32.sub a b 
       and imul a b = Int32.mul a b
@@ -252,9 +252,9 @@ module Make(Code:Code) : Emulator =
 		    (match mode with
 		       | R ->
 			   (function n ->
-			      let c = Int32.logand n mask_reg in
+			      let c = Int32.logand n MASK_REG in
 			      let n = Int32.shift_right_logical n 21 in
-			      let a = Int32.logand n mask_reg in
+			      let a = Int32.logand n MASK_REG in
 			      let va = register_get a in
 				if ((int32_compare va 0l) >= 0) && ((int32_compare va (register_get c)) < 0) then
 				  INCRPC(4l)
@@ -262,10 +262,10 @@ module Make(Code:Code) : Emulator =
 				  raise (Error(ChkExn)))
 		       | I ->
 			   (function n ->
-			      let c = Int32.logand n mask_imm in
+			      let c = Int32.logand n MASK_IMM in
 			      let c = Int32.shift_right (Int32.shift_left c 16) 16 in (* 16 = 32 - 16 *)
 			      let n = Int32.shift_right_logical n 21 in
-			      let a = Int32.logand n mask_reg in
+			      let a = Int32.logand n MASK_REG in
 			      let va = register_get a in
 				if ((int32_compare va 0l) >= 0) && ((int32_compare va c) < 0) then
 				  INCRPC(4l)
@@ -273,9 +273,9 @@ module Make(Code:Code) : Emulator =
 				  raise (Error(ChkExn)))
 		       | IU ->
 			   (function n ->
-			      let c = Int32.logand n mask_imm in
+			      let c = Int32.logand n MASK_IMM in
 			      let n = Int32.shift_right_logical n 21 in
-			      let a = Int32.logand n mask_reg in
+			      let a = Int32.logand n MASK_REG in
 			      let va = register_get a in
 				if ((int32_compare va 0l) >= 0) && ((int32_compare va c) < 0) then
 				  INCRPC(4l)
@@ -283,35 +283,44 @@ module Make(Code:Code) : Emulator =
 				  raise (Error(ChkExn))))
 		| Bsr ->
 		    (fun n ->
-		       let c = Int32.logand n mask_rel in
+		       let c = Int32.logand n MASK_REL in
 		       let c = Int32.shift_right (Int32.shift_left c 11) 11 in (* 11 = 32 - 21 *)
 			 register_set 31l (Int32.add (!pc) 4l);
 			 INCRPC(Int32.mul c 4l))
 		| Jsr -> 
 		    (fun n ->
 		       register_set 31l (Int32.add (!pc) 4l);
-		       pc := Int32.mul (Int32.logand mask_abs n) 4l)
+		       pc := Int32.mul (Int32.logand MASK_ABS n) 4l)
 		| Ret -> 
 		    (fun n ->
-		       let a = Int32.logand (Int32.shift_right_logical n 21) mask_reg in
+		       let a = Int32.logand (Int32.shift_right_logical n 21) MASK_REG in
 			 if int32_compare 0l a = 0 then raise (Error(Syscall(0l,0l,Risc.int_of_syscall Risc.Sys_exit)))
 			 else pc := register_get a)
 		| Break -> (fun n -> raise (Error(BrkExn)))
 		| Sys ->
 		    (fun n ->
-		       let c = Int32.logand n mask_imm in
+		       let c = Int32.logand n MASK_IMM in
 		       let n = Int32.shift_right_logical n 16 in
-		       let b = Int32.logand n mask_reg in
+		       let b = Int32.logand n MASK_REG in
 		       let n = Int32.shift_right_logical n 5 in
-		       let a = Int32.logand n mask_reg in
+		       let a = Int32.logand n MASK_REG in
 			 raise (Error(Syscall(a,b,Int32.to_int c))))
 	      with Not_found -> ()
 	done;
 	ops
 
-    let _ =
+    let reset () =
+      for i = 0 to mem_size - 1 do
+	memory.{i} <- 0l
+      done;
+      for i = 0 to 31 do
+	register_set (Int32.of_int i) 0l;
+      done;
+      setPC 0l;
       Code.code#iter (fun i instr ->
 			memory_set (Int32.of_int i) (Codec.code_instruction instr))
+
+    let _ = reset ()
 
     let verbose = false
 
@@ -487,47 +496,50 @@ module Make(Code:Code) : Emulator =
 		end
       in init,alloc
 
+    let tick () = 
+      DEBUG(prerr_string "PC: ";prerr_string (Int32.to_string (!pc));prerr_newline();)
+	try
+	  let n = read_word (!pc) in
+	  let opcode = (Int32.to_int (Int32.shift_right_logical n 26)) land 0x3f in
+	    get_op_table.(opcode) (n)
+	with Error(Syscall(a,b,c)) ->
+	  (match Risc.syscall_of_int c with
+	     | Some(syscall) -> 
+		 (match syscall with
+		    | Risc.Sys_exit -> raise (Error(Exit(register_get a)))
+		    | Risc.Sys_io_wr_chr ->
+			Pervasives.output_char stdout (Char.chr ((Int32.to_int (register_get a)) land 0xff));
+		    | Risc.Sys_io_wr_int ->
+			Pervasives.output_string stdout (Int32.to_string (register_get a))
+		    | Risc.Sys_io_flush ->
+			Pervasives.flush stdout
+		    | Risc.Sys_io_rd_chr ->
+			let n = 
+			  try Pervasives.input_byte stdin
+			  with End_of_file -> -1
+			in
+			  register_set a (Int32.of_int n)
+		    | Risc.Sys_io_rd_int ->
+			register_set a (Int32.of_string (Pervasives.input_line stdin));
+		    | Risc.Sys_get_total_mem_size ->
+			register_set a mem_size_int32
+		    | Risc.Sys_gc_init -> 
+			let ra = register_get a
+			and rb = register_get b in
+			let sz = Int32.shift_left (Int32.logand rb MASK_SZ) 2
+			and sp = Int32.shift_right_logical rb 27 in
+			  gc_init ra sz sp
+		    | Risc.Sys_gc_alloc -> 
+			let sz = register_get b in
+			  register_set a (gc_alloc sz)
+		    | _ -> failwith "syscall not yet implemented"
+		 );
+		 INCRPC(4l)
+	     | None -> raise (Error(Illegal)))
+      
+
     let exec () = 
-      let mask_sz = Int32.of_int 0x1ffffff in
-	while true do
-	  DEBUG(prerr_string "PC: ";prerr_string (Int32.to_string (!pc));prerr_newline();)
-	  try
-	    let n = read_word (!pc) in
-	    let opcode = (Int32.to_int (Int32.shift_right_logical n 26)) land 0x3f in
-	      get_op_table.(opcode) (n)
-	  with Error(Syscall(a,b,c)) ->
-	    (match Risc.syscall_of_int c with
-	       | Some(syscall) -> 
-		   (match syscall with
-		      | Risc.Sys_exit -> raise (Error(Exit(register_get a)))
-		      | Risc.Sys_io_wr_chr ->
-			  Pervasives.output_char stdout (Char.chr ((Int32.to_int (register_get a)) land 0xff));
-		      | Risc.Sys_io_wr_int ->
-			  Pervasives.output_string stdout (Int32.to_string (register_get a))
-		      | Risc.Sys_io_flush ->
-			  Pervasives.flush stdout
-		      | Risc.Sys_io_rd_chr ->
-			  let n = 
-			    try Pervasives.input_byte stdin
-			    with End_of_file -> -1
-			  in
-			    register_set a (Int32.of_int n)
-		      | Risc.Sys_io_rd_int ->
-			  register_set a (Int32.of_string (Pervasives.input_line stdin));
-		      | Risc.Sys_get_total_mem_size ->
-			  register_set a mem_size_int32
-		      | Risc.Sys_gc_init -> 
-			  let ra = register_get a
-			  and rb = register_get b in
-			  let sz = Int32.shift_left (Int32.logand rb mask_sz) 2
-			  and sp = Int32.shift_right_logical rb 27 in
-			    gc_init ra sz sp
-		      | Risc.Sys_gc_alloc -> 
-			  let sz = register_get b in
-			    register_set a (gc_alloc sz)
-		      | _ -> failwith "syscall not yet implemented"
-		   );
-		   INCRPC(4l)
-	       | None -> raise (Error(Illegal)))
-	done
+      while true do
+	tick ()
+      done
   end

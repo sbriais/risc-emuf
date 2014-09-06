@@ -7,26 +7,25 @@ let register c =
   else raise WrongOpCode
 
 let signed c =
-  if c land 0xffff <> c then raise WrongOpCode
-  else
-    let c =
-      if c land 0x8000 <> 0 then c lor 0x7fff0000
-      else c
-    in
-      Signed(freeze c)
+  let n = Int32.of_int c in
+  let n = Int32.shift_left n 16 in
+  let n = Int32.shift_right n 16 in
+  let c = Int32.to_int n in
+    Signed(freeze c)
 
 let unsigned c = 
-  if c land 0xffff <> c then raise WrongOpCode
-  else Unsigned(freeze c)
+  let n = Int32.of_int c in
+  let n = Int32.shift_left n 16 in
+  let n = Int32.shift_right_logical n 16 in
+  let c = Int32.to_int n in
+    Unsigned(freeze c)
 
 let relative c =
-  if c land 0x1fffff <> c then raise WrongOpCode
-  else
-    let c =
-      if c land 0x100000 <> 0 then c lor 0x7fe00000
-      else c
-    in
-      Relative(freeze c)
+  let n = Int32.of_int c in
+  let n = Int32.shift_left n (32-21) in
+  let n = Int32.shift_right n (32-21) in
+  let c  = Int32.to_int n in
+    Relative(freeze c)
 
 let absolute c = Absolute(freeze c)
 
@@ -187,11 +186,11 @@ let code_3 op a b c =
     Int32.logor code (Int32.of_int c)
 
 let decode_3 n =
-  let c = (Int32.to_int n) land 0xffff in
+  let c = Int32.to_int (Int32.logand n 0xffffl) in
   let n = Int32.shift_right_logical n 16 in
-  let b = (Int32.to_int n) land 0x1f in
+  let b = Int32.to_int (Int32.logand n 0x1fl) in
   let n = Int32.shift_right_logical n 5 in
-  let a = (Int32.to_int n) land 0x1f in
+  let a = Int32.to_int (Int32.logand n 0x1fl) in
     a,b,c
 
 let code_2 op a c =
@@ -200,9 +199,9 @@ let code_2 op a c =
     Int32.logor code (Int32.of_int c)
 
 let decode_2 n =
-  let c = (Int32.to_int n) land 0x1fffff in
+  let c = Int32.to_int (Int32.logand n 0x1fffffl) in
   let n = Int32.shift_right_logical n 21 in
-  let a = (Int32.to_int n) land 0x1f in
+  let a = Int32.to_int (Int32.logand n 0x1fl) in
     a,c
 
 let code_1_reg op a =
@@ -214,7 +213,7 @@ let code_1_imm op c =
     Int32.logor code (Int32.of_int c)
 
 let decode_1 n =
-  (Int32.to_int n) land 0x3ffffff
+  Int32.to_int (Int32.logand n 0x3ffffffl)
 
 let code_0 op =
   Int32.shift_left (Int32.of_int op) 26
@@ -311,15 +310,9 @@ let decode_instruction n =
 					       begin
 						 let c = decode_1 n in
 						 let a = (c lsr 21) land 0x1f in
-						   if a lsl 21 <> c then raise WrongOpCode
-						   else Ret(R(a))
+						   Ret(R(a))
 					       end
-					     else if op = code_of_break then
-					       begin
-						 let c = decode_1 n in
-						   if c <> 0 then raise WrongOpCode
-						   else Break
-					       end
+					     else if op = code_of_break then Break
 					     else if op = code_of_syscall then 
 					       begin
 						 let a,b,c = decode_3 n in
