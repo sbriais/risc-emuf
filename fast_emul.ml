@@ -383,6 +383,8 @@ module Make(Code:Code) : Emulator =
 			register_set a (Int32.of_string (Pervasives.input_line stdin));
 		    | Risc.Sys_get_total_mem_size ->
 			register_set a (Int32.of_int mem_size)
+		    | Risc.Sys_gc_init -> failwith "gc_init"
+		    | Risc.Sys_gc_alloc -> failwith "gc_init"
 		    | _ -> ()
 		 );
 		 pc := Int32.add four (!pc)
