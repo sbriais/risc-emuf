@@ -11,7 +11,7 @@
 (*                                                                     *)
 (***********************************************************************)
 
-(* $Id: map.ml,v 1.17 2005/08/13 20:59:37 doligez Exp $ *)
+(* $Id: gcmap.ml,v 1.1 2005/11/25 17:31:07 sbriais Exp $ *)
 
 type key = Int32.t
 
@@ -80,6 +80,7 @@ let rec add x data = function
           bal l v d (add x data r)
 
 (* on suppose x < y *)
+(*  
 let rec add_or_join x y data = function
     Empty ->
       Node(Empty, x, data, Empty, 1)
@@ -97,6 +98,7 @@ let rec add_or_join x y data = function
 	    if c = 0 then Node(l,x,data,r,h)
 	    else 
               bal (add_or_join x y data l) v d r
+*)
 
 let rec find x = function
     Empty ->
@@ -142,6 +144,13 @@ let rec remove x = function
           bal (remove x l) v d r
         else
           bal l v d (remove x r)
+
+let add_or_join x y data map =
+  try
+    let c = find y map in
+      data.size <- int32_add data.size c.size;
+      add x data (remove y map)
+  with Not_found -> add x data map
 
 let rec iter f = function
     Empty -> ()

@@ -104,12 +104,10 @@ module Make(Code:Code) : Emulator =
     let registers = Array.create 32 0l
 		      
     let register_get i = 
-      assert(0 <= (Int32.to_int i) && (Int32.to_int i) <= 31);
       DEBUG(prerr_string "getting register ";prerr_string (Int32.to_string i);prerr_newline();)
       registers.(Int32.to_int i)
 			   
     let register_set i v =
-      assert(0 <= (Int32.to_int i) && (Int32.to_int i) <= 31);
       DEBUG(prerr_string "setting register ";prerr_string (Int32.to_string i);prerr_string " to value ";prerr_string (Int32.to_string v);prerr_newline();)
     let i = Int32.to_int i in
       if i > 0 then registers.(i) <- v
@@ -130,13 +128,6 @@ module Make(Code:Code) : Emulator =
     let memory_set i v = memory.{Int32.to_int i} <- v
 
     let read_word addr =
-      if not (0 <= (Int32.to_int addr) && (Int32.to_int addr) <= 4*mem_size) then 
-	begin
-	  flush stderr;
-	  print_string (Int32.to_string addr);print_newline();
-	  print_string (Int32.to_string !pc);print_newline();
-	  failwith "read_word"
-	end;
       DEBUG(prerr_string "reading word at ";prerr_string (Int32.to_string addr);prerr_newline();)
 	memory_get (Int32.shift_right addr 2)
 	
