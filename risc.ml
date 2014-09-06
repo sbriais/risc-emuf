@@ -220,5 +220,6 @@ object(self)
 	       Hashtbl.add label_table name l;
 	       l)
       in l#setAnchor pc
+  method getLen = len
 end
     

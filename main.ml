@@ -27,6 +27,8 @@ let _ =
       code#dump
     else
       begin
+	if !mem_size < code#getLen then
+	  failwith "not enough memory (use -mem flag to increase memory)";
 	if !fast then
 	  let module Emulator = Fast_emul.Make(struct
 						 let mem_size = !mem_size

@@ -68,14 +68,20 @@ let binop_of_token = function
   | PLUS -> binop_freeze Int32.add
   | MINUS -> binop_freeze Int32.sub
   | MULT -> binop_freeze Int32.mul
+  | BAND -> binop_freeze Int32.logand
+  | BOR -> binop_freeze Int32.logor
+  | BSHL -> binop_freeze (fun x n -> Int32.shift_left x (Int32.to_int n))
+  | BSHR -> binop_freeze (fun x n -> Int32.shift_right_logical x (Int32.to_int n))
+  | BASHR -> binop_freeze (fun x n -> Int32.shift_right x (Int32.to_int n))
 
 let unop_of_token = function
   | MINUS -> unop_freeze Int32.neg
+  | BNOT -> unop_freeze Int32.lognot
 
 let rec parse_expression scanner code = 
   let rec aux expr =
     match scanner#currentToken with
-	PLUS | MINUS ->
+	PLUS | MINUS | BOR ->
 	  let op = binop_of_token scanner#currentToken in
 	    scanner#nextToken;
 	    let term = parse_term scanner code in
@@ -85,16 +91,25 @@ let rec parse_expression scanner code =
 and parse_term scanner code =
   let rec aux term =
     match scanner#currentToken with
-	MULT ->
+	MULT | BAND ->
 	  let op = binop_of_token scanner#currentToken in
 	    scanner#nextToken;
 	    let factor = parse_factor0 scanner code in
 	      aux (op term factor)
       | _ -> term
   in aux (parse_factor0 scanner code)
-and parse_factor0 scanner code =
+and parse_factor0 scanner code = 
+  let factor = parse_factor1 scanner code in
+    match scanner#currentToken with
+	BSHL | BSHR | BASHR ->
+	  let op = binop_of_token scanner#currentToken in
+	    scanner#nextToken;
+	    let INT(n) = accept_token scanner (INT(0l)) in
+	      op factor (freeze n)
+      | _ -> factor
+and parse_factor1 scanner code =
   match scanner#currentToken with
-      MINUS -> 
+      MINUS | BNOT -> 
 	let op = unop_of_token scanner#currentToken in
 	  scanner#nextToken;
 	  let factor = parse_factor scanner code in

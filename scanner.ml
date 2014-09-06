@@ -13,6 +13,7 @@ module Tokens =
       | LPAREN
       | RPAREN
       | COLON
+      | BAND | BOR | BSHL | BSHR | BASHR | BNOT
 	  (* token pour mots clés *)
       | ADD | ADDI | ADDIU
       | SUB | SUBI | SUBIU
@@ -114,6 +115,11 @@ module Tokens =
       | LPAREN -> "("
       | RPAREN -> ")"
       | COLON -> ":"
+      | BAND -> "&"
+      | BOR -> "|"
+      | BSHL -> "<<"
+      | BSHR -> ">>"
+      | BASHR -> ">>>"
       | t ->
 	  begin
 	    match (Hashtbl.fold  (fun s t' str -> if t = t' then Some(s) else str) keywords None) with
@@ -187,6 +193,15 @@ class scanner =
   and isLetter = function
       None -> false
     | Some(c) -> (match c with 'a'..'z' | 'A'..'Z' -> true | _ -> false)
+  and isBinDigit = function
+      None -> false
+    | Some(c) -> (match c with '0' | '1' -> true | _ -> false)
+  and isOctDigit = function
+      None -> false
+    | Some(c) -> (match c with '0'..'7' -> true | _ -> false)
+  and isHexDigit = function
+      None -> false
+    | Some(c) -> (match c with '0'..'9' | 'a'..'f' | 'A'..'F' -> true | _ -> false)
   and isWhitespace = (isChar ' ') ||| (isChar '\t') ||| (isChar '\012') ||| (isChar '\n')
   in
     fun (chars:charReader) ->
@@ -200,6 +215,16 @@ class scanner =
 	      Buffer.add_char buf c
 	  done;
 	  Buffer.contents buf
+      in
+      let read_number pos prefix p = 
+	let string = prefix^(string_such_that p) in
+	  begin
+	    try
+	      INT(Int32.of_string string)
+	    with Failure(_) -> 
+	      failwith ("Integer too big: "^string);
+	      INT(Int32.zero)
+	  end
       in
 object(self)
   val mutable token = EOF
@@ -248,6 +273,23 @@ object(self)
 	  | Some('(') -> acceptToken LPAREN
 	  | Some(')') -> acceptToken RPAREN
 	  | Some(':') -> acceptToken COLON
+	  | Some('&') -> acceptToken BAND
+	  | Some('|') -> acceptToken BOR
+	  | Some('~') -> acceptToken BNOT
+	  | Some('<') ->
+	      chars#nextChar;
+	      (match chars#currentChar with
+		 | Some('<') -> acceptToken BSHL
+		 | _ -> failwith "invalid token <")
+	  | Some('>') ->
+	      chars#nextChar;
+	      (match chars#currentChar with
+		 | Some('>') ->
+		     chars#nextChar;
+		     (match chars#currentChar with
+			| Some('>') -> acceptToken BASHR
+			| _ -> BSHR)
+		 | _ -> failwith "invalid token >")
 	  | Some('"') -> 
 	      chars#nextChar;
               let isPrematureEnd = isEof ||| (isChar '\n') in
@@ -266,14 +308,23 @@ object(self)
 		    Hashtbl.find keywords string 
 		  with Not_found -> IDENT(string)
 		end
-	  | c when c === '0' -> acceptToken (INT(Int32.zero))
+	  | c when c === '0' -> 
+	      let pos = chars#getPosition in
+		chars#nextChar;
+		(match chars#currentChar with
+		   | Some('x') | Some('X') -> 
+		       chars#nextChar;
+		       read_number pos "0x" isHexDigit
+		   | Some('o') | Some('O') -> 
+		       chars#nextChar;
+		       read_number pos "0o" isOctDigit
+		   | Some('b') | Some('B') -> 
+		       chars#nextChar;
+		       read_number pos "0b" isBinDigit
+		   | _ -> (INT(Int32.zero)))
 	  | c when isDigit(c) ->
-	      let string = string_such_that isDigit in
-		begin
-		  try
-		    INT(Int32.of_string string)
-		  with Failure(_) -> INT(Int32.zero)
-		end
+	      let pos = chars#getPosition in
+		read_number pos "" isDigit 
 	  | Some(c) -> acceptToken (BAD(c))
       end
   method currentToken = token
