@@ -1,6 +1,6 @@
 INIT(risc-emuf)
 VERSION(0.1.0)
-SOURCES(scanner.ml risc.ml emulator.ml analyzer.ml main.ml codec.ml fast_emul.ml)
+SOURCES(scanner.ml risc.ml emulator.ml analyzer.ml main.ml codec.ml fast_emul.ml gcmap.ml)
 dnl EXTRA(README)
 dnl USE_LEXER()
 COMPFLAGS(-unsafe)

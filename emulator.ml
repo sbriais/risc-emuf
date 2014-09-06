@@ -11,20 +11,9 @@ type error =
 
 exception Error of error
 
-type cell = { mutable size : int; mutable alive: bool }
+let new_cell sz al = { Gcmap.size = sz; Gcmap.live = al }
 
-let new_cell sz al = { size = sz; alive = al }
-
-exception Found of int 
-
-let string_of_bool = function
-  | true -> "true"
-  | false -> "false"
-
-module CellMap = Map.Make(struct
-			    type t = int
-			    let compare n m = (n-m)-(m-n)
-			  end)
+exception Found of Int32.t
 
 let array_create n =
   let res = Array1.create int32 c_layout n in
@@ -40,30 +29,33 @@ let array_set t i v =
   t.{i} <- v
 
 class gc = 
-  let align n = n land 0x7ffffffc in
-  let round n = align (n + 3) in
+  let mask_align = Int32.shift_left (Int32.of_int 0x3fffffff) 2 in
+  let three = Int32.of_int 3 in
+  let four = Int32.of_int 4 in
+  let align n = Int32.logand n mask_align in
+  let round n = align (Int32.add n three) in
     fun verbose ->
 object(self)
-  val mutable alive_cells = CellMap.empty
-  val mutable dead_cells = CellMap.empty
+  val mutable alive_cells = Gcmap.empty
+  val mutable dead_cells = Gcmap.empty
   val stack = Stack.create ()
-  val mutable hp_address = 0
-  val mutable hp_size = 0
+  val mutable hp_address = Int32.zero
+  val mutable hp_size = Int32.zero
   val mutable sp = 0
   method init hp sz reg emu =
-    if (hp < 0) || (hp >= emu#getMemSize) then
-      failwith ("out of bounds heap start: "^(string_of_int hp))
-    else if (hp + sz - 1 >= emu#getMemSize) then
-      failwith ("out of bounds heap end: "^(string_of_int (hp + sz - 1)))
-    else if (sz < 0) then
-      failwith ("negative heap size: "^(string_of_int sz));
+    if (Int32.compare hp Int32.zero < 0) || (Int32.compare hp (Int32.of_int emu#getMemSize) >= 0) then
+      failwith ("out of bounds heap start: "^(Int32.to_string hp))
+    else if (Int32.compare (Int32.add hp sz) (Int32.of_int emu#getMemSize) > 0) then
+      failwith ("out of bounds heap end: "^(Int32.to_string (Int32.add hp sz)))
+    else if (Int32.compare sz Int32.zero < 0) then
+      failwith ("negative heap size: "^(Int32.to_string sz));
     let sz = 
-      if sz = 0 then emu#getMemSize
-      else sz + hp
+      if Int32.compare sz Int32.zero = 0 then Int32.of_int emu#getMemSize
+      else Int32.add sz hp
     in
     let hp = round hp in
-    let sz = min sz emu#getMemSize in
-    let sz = max 0 (sz - hp) in
+    let sz = min sz (Int32.of_int emu#getMemSize) in
+    let sz = max Int32.zero (Int32.sub sz hp) in
     let sz = align sz in
       hp_address <- hp;
       hp_size <- sz;
@@ -71,25 +63,25 @@ object(self)
       if verbose then
 	begin
 	  prerr_string "[GC]";
-	  prerr_string "heap address = ";prerr_int hp_address;prerr_string ", ";
-	  prerr_string "heap size = ";prerr_int hp_size;prerr_string " bytes, ";
+	  prerr_string "heap address = ";prerr_string (Int32.to_string hp_address);prerr_string ", ";
+	  prerr_string "heap size = ";prerr_string (Int32.to_string hp_size);prerr_string " bytes, ";
 	  if(sp = 0) then prerr_string "no stack pointer"
 	  else (prerr_string "stack pointer = ";prerr_int sp);
 	  prerr_newline()
 	end;
-      alive_cells <- CellMap.empty;
-      dead_cells <- CellMap.add hp_address (new_cell hp_size false) (CellMap.empty)
-(*
+      alive_cells <- Gcmap.empty;
+      dead_cells <- Gcmap.add hp_address (new_cell hp_size false) (Gcmap.empty)
+	(*
+	  method alloc sz emu =
+	  if (sz < 0) then failwith ("negative block size: "^(string_of_int sz));
+	  let sz = max 4 (round sz) in
+	  let addr = hp_address in
+	  hp_address <- hp_address + sz;
+	  addr
+	*)
   method alloc sz emu =
-    if (sz < 0) then failwith ("negative block size: "^(string_of_int sz));
-    let sz = max 4 (round sz) in
-    let addr = hp_address in
-      hp_address <- hp_address + sz;
-      addr
-*)
-  method alloc sz emu =
-    if (sz < 0) then failwith ("negative block size: "^(string_of_int sz));
-    let sz = max 4 (round sz) in
+    if (Int32.compare sz Int32.zero < 0) then failwith ("negative block size: "^(Int32.to_string sz));
+    let sz = max four (round sz) in
       match self#lock sz with
 	| Some(addr) -> addr
 	| None -> 
@@ -97,94 +89,98 @@ object(self)
 	      self#free emu;
 	    match self#lock sz with
 	      | Some(addr) -> addr
-	      | None -> failwith ("could not allocate block of "^(string_of_int sz)^" bytes")
+	      | None -> failwith ("could not allocate block of "^(Int32.to_string sz)^" bytes")
 	    end
   method private mark addr =
     try
-      let c = CellMap.find addr alive_cells in
-	if not (c.alive) then
+      let c = Gcmap.find addr alive_cells in
+	if not (c.Gcmap.live) then
 	  begin
-	    c.alive <- true;
+	    c.Gcmap.live <- true;
 	    Stack.push (addr,c) stack;
 	  end
     with Not_found -> ()
   method private free emu =
-    let usage1 = ref 0 in
-      CellMap.iter (fun addr c ->
-		      c.alive <- false;
-		      usage1 := (!usage1) + c.size) alive_cells;
+    let usage1 = ref Int32.zero in
+      Gcmap.iter (fun addr c ->
+		      c.Gcmap.live <- false;
+		      usage1 := Int32.add (!usage1) c.Gcmap.size) alive_cells;
       let stk_address = 
-	if sp = 0 then hp_address + hp_size 
-	else (Int32.to_int (emu#readReg sp))
+	if sp = 0 then (Int32.add hp_address hp_size)
+	else (emu#readReg sp)
       in
-      let mem_size = emu#getMemSize in
+      let mem_size = Int32.of_int emu#getMemSize in
       let stk_address = align stk_address in
-	if stk_address < hp_address + hp_size then
+	if Int32.compare stk_address (Int32.add hp_address hp_size) < 0 then
 	  failwith "stack overwrote heap";
 	for i = 0 to 31 do
-	  self#mark (Int32.to_int (emu#readReg i))
+	  self#mark (emu#readReg i)
 	done;
-	let i = ref 0 in
-	  while !i < hp_address do
-	    self#mark (Int32.to_int (emu#readWord (!i)));
-	    i := (!i) + 4
+	let i = ref Int32.zero in
+	  while Int32.compare !i hp_address < 0 do
+	    self#mark (emu#readWord (Int32.to_int !i));
+	    i := Int32.add (!i) four
 	  done;
 	  i := stk_address;
-	  while !i < mem_size do
-	    self#mark (Int32.to_int (emu#readWord (!i)));
-	    i := (!i) + 4
+	  while Int32.compare !i mem_size < 0 do
+	    self#mark (emu#readWord (Int32.to_int !i));
+	    i := Int32.add (!i) four
 	  done;
 	  while not (Stack.is_empty stack) do
 	    let (address,c) = Stack.pop stack in
 	      i := address;
-	      while !i < address + c.size do
-		self#mark (Int32.to_int (emu#readWord (!i)));
-		i := (!i) + 4
+	      while Int32.compare !i (Int32.add address c.Gcmap.size) < 0 do
+		self#mark (emu#readWord (Int32.to_int !i));
+		i := Int32.add (!i) four
 	      done
 	  done;
-	  let usage2 = ref 0 in
-	    CellMap.iter (fun addr c ->
-			    if c.alive then
-			      usage2 := (!usage2) + c.size
+	  let usage2 = ref Int32.zero in
+	    Gcmap.iter (fun addr c ->
+			    if c.Gcmap.live then
+			      usage2 := Int32.add (!usage2) c.Gcmap.size
 			    else
 			      begin
-				alive_cells <- CellMap.remove addr alive_cells;
+				alive_cells <- Gcmap.remove addr alive_cells;
 				self#add_dead addr c
 			      end)
 	      alive_cells;
 	    if verbose then
 	      begin
 		prerr_string "[GC]";
-		prerr_int (!usage1);
+		prerr_string (Int32.to_string (!usage1));
 		prerr_string " bytes -> ";
-		prerr_int (!usage2);
+		prerr_string (Int32.to_string (!usage2));
 		prerr_string " bytes";
 		prerr_newline()
 	      end
   method private add_dead addr c =
+    let addr' = Int32.add addr c.Gcmap.size in
+      dead_cells <- Gcmap.add_or_join addr addr' c dead_cells
+(*
     try
-      let addr' = addr + c.size in
-      let c' = CellMap.find addr' dead_cells in
-	c.size <- c.size + c'.size;
-	dead_cells <- CellMap.add addr c (CellMap.remove addr' dead_cells)
+
+      let c' = Gcmap.find addr' dead_cells in
+	c.Gcmap.size <- c.Gcmap.size + c'.Gcmap.size;
+	dead_cells <- Gcmap.add addr c (Gcmap.remove addr' dead_cells)
     with Not_found ->
-      dead_cells <- CellMap.add addr c dead_cells
+      dead_cells <- Gcmap.add addr c dead_cells
+*)
   method private lock sz =
     try
-      CellMap.iter (fun addr c ->
-		      if c.size >= sz then
-			if c.size = sz then
+      Gcmap.iter (fun addr c ->
+		      if Int32.compare c.Gcmap.size sz >= 0 then
+			if Int32.compare c.Gcmap.size sz = 0 then
 			  begin
-			    c.alive <- false;
-			    dead_cells <- CellMap.remove addr dead_cells;
-			    alive_cells <- CellMap.add addr c alive_cells;
+			    c.Gcmap.live <- false;
+			    dead_cells <- Gcmap.remove addr dead_cells;
+			    alive_cells <- Gcmap.add addr c alive_cells;
 			    raise (Found(addr))
 			  end
 			else
 			  begin
-			    c.size <- c.size - sz;
-			    dead_cells <- CellMap.add (addr+sz) c (CellMap.remove addr dead_cells);
-			    alive_cells <- CellMap.add addr (new_cell sz true) alive_cells;
+			    c.Gcmap.size <- Int32.sub c.Gcmap.size sz;
+			    dead_cells <- Gcmap.add (Int32.add addr sz) c (Gcmap.remove addr dead_cells);
+			    alive_cells <- Gcmap.add addr (new_cell sz true) alive_cells;
 			    raise (Found(addr))
 			  end) dead_cells;
       if verbose then prerr_string "[GC]no cell allocated\n";
@@ -195,7 +191,7 @@ object(self)
 	    begin
 	      prerr_string "[GC]";
 	      prerr_string "cell allocated: ";
-	      prerr_int addr;
+	      prerr_string (Int32.to_string addr);
 	      prerr_newline()
 	    end;
 	  Some(addr)
@@ -365,15 +361,15 @@ object(self)
 		| Sys_io_wr_int -> 
 		    Pervasives.output_string stdout (Int32.to_string (self#readReg a))
 		| Sys_gc_init -> 
-		    let a = Int32.to_int (self#readReg a) in
+		    let a = (self#readReg a) in
 		    let b = self#readReg b in
-		    let sz = Int32.to_int (Int32.logand b (Int32.of_int 0x1ffffff))
+		    let sz = (Int32.logand b (Int32.of_int 0x1ffffff))
 		    and sp = Int32.to_int (Int32.shift_right_logical b 27)
 		    in
-		      gc#init a (4*sz) sp (self:>emulator)
+		      gc#init a (Int32.mul sz 4l) sp (self:>emulator)
 		| Sys_gc_alloc -> 
-		    let sz = Int32.to_int (self#readReg b) in
-		      self#writeReg a (Int32.of_int (gc#alloc sz (self:>emulator)))
+		    let sz = (self#readReg b) in
+		      self#writeReg a (gc#alloc sz (self:>emulator))
 		| Sys_get_total_mem_size -> 
 		    self#writeReg a (Int32.of_int (self#getMemSize))
 		| Sys_io_flush -> 
