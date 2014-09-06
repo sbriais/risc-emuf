@@ -1,3 +1,21 @@
+(*
+  DLX emulator
+  Copyright (C) 2005-2014 Sebastien Briais (sbriais@free.fr)
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*)
+
 open Risc
 
 exception WrongOpCode
@@ -13,7 +31,7 @@ let signed c =
   let c = Int32.to_int n in
     Signed(freeze c)
 
-let unsigned c = 
+let unsigned c =
   let n = Int32.of_int c in
   let n = Int32.shift_left n 16 in
   let n = Int32.shift_right_logical n 16 in
@@ -39,8 +57,8 @@ let case_bri_r c = BR(register c)
 
 let case_bri_i c = BI(signed c)
 
-let code_of_arith_op,arith_op_decode = 
-  let assoc,i,iu = 
+let code_of_arith_op,arith_op_decode =
+  let assoc,i,iu =
     [Add,0;
      Sub,1;
      Mul,2;
@@ -70,14 +88,14 @@ let code_of_arith_op,arith_op_decode =
 		      Not_found -> None))
   in code,decode
 
-let code_of_log_op,log_op_decode = 
-  let assoc,i,iu = 
+let code_of_log_op,log_op_decode =
+  let assoc,i,iu =
     [Or,8;
      And,9;
      Bic,10;
      Xor,11],16,52
   in
-  let code op c = 
+  let code op c =
     let (_,base) = List.find (fun (x,_) -> x = op) assoc
     in
       match c with
@@ -99,7 +117,7 @@ let code_of_log_op,log_op_decode =
 		      Not_found -> None))
   in code,decode
 
-let code_of_sh_op,sh_op_decode = 
+let code_of_sh_op,sh_op_decode =
   let assoc,i =
     [Lsh,12;
      Ash,13],16
@@ -113,7 +131,7 @@ let code_of_sh_op,sh_op_decode =
   and decode n =
     try
       Some(fst (List.find (fun (_,x) -> x = n) assoc),case_bri_r)
-    with 
+    with
 	Not_found ->
 	  (try
 	     Some(fst (List.find (fun (_,x) -> x + i = n) assoc),case_bri_i)
@@ -121,7 +139,7 @@ let code_of_sh_op,sh_op_decode =
 	       Not_found -> None)
   in code,decode
 
-let code_of_chk,chk_decode = 
+let code_of_chk,chk_decode =
   let r,i,iu = 14,30,39
   in
   let code = function
@@ -135,7 +153,7 @@ let code_of_chk,chk_decode =
     else None
   in code,decode
 
-let code_of_mem_op,mem_op_decode = 
+let code_of_mem_op,mem_op_decode =
   let assoc =
     [Ldw,32;
      Ldb,33;
@@ -152,7 +170,7 @@ let code_of_mem_op,mem_op_decode =
     with Not_found -> None
   in code,decode
 
-let code_of_test_op,test_op_decode = 
+let code_of_test_op,test_op_decode =
   let assoc =
     [Beq,40;
      Bne,41;
@@ -161,7 +179,7 @@ let code_of_test_op,test_op_decode =
      Ble,44;
      Bgt,45]
   in
-  let code op = 
+  let code op =
     snd (List.find (fun (x,_) -> x = op) assoc)
   and decode n =
     try
@@ -273,47 +291,47 @@ let decode_instruction n =
   let op = (Int32.to_int (Int32.shift_right_logical n 26)) land 0x3f in
     try
       match arith_op_decode op with
-	  Some(op,third) -> 
+	  Some(op,third) ->
 	    let a,b,c = decode_3 n in
 	      IArith(op,R(a),R(b),(third c))
 	| None ->
 	    (match log_op_decode op with
-		 Some(op,third) -> 
+		 Some(op,third) ->
 		   let a,b,c = decode_3 n in
 		     ILog(op,R(a),R(b),(third c))
-	       | None -> 
+	       | None ->
 		   (match sh_op_decode op with
-			Some(op,third) -> 
+			Some(op,third) ->
 			  let a,b,c = decode_3 n in
 			    ISh(op,R(a),R(b),(third c))
 		      | None ->
 			(match mem_op_decode op with
-			     Some(op) -> 
+			     Some(op) ->
 			       let a,b,c = decode_3 n in
 				 IMem(op,R(a),R(b),signed c)
-			   | None -> 
+			   | None ->
 			       (match test_op_decode op with
-				    Some(op) -> 
+				    Some(op) ->
 				      let a,c = decode_2 n in
 					ITest(op,R(a),relative c)
-				  | None -> 
+				  | None ->
 				      (match chk_decode op with
-					   Some(second) -> 
+					   Some(second) ->
 					     let a,c = decode_2 n in
 					       Chk(R(a),(second c))
 					 | None ->
-					     if op = code_of_bsr then 
+					     if op = code_of_bsr then
 					       let c = decode_1 n in Bsr(relative c)
-					     else if op = code_of_jsr then 
+					     else if op = code_of_jsr then
 					       let c = decode_1 n in Jsr(absolute c)
-					     else if op = code_of_ret then 
+					     else if op = code_of_ret then
 					       begin
 						 let c = decode_1 n in
 						 let a = (c lsr 21) land 0x1f in
 						   Ret(R(a))
 					       end
 					     else if op = code_of_break then Break
-					     else if op = code_of_syscall then 
+					     else if op = code_of_syscall then
 					       begin
 						 let a,b,c = decode_3 n in
 						   match syscall_of_int c with
