@@ -11,23 +11,19 @@ type error =
 
 exception Error of error
 
-type cell = { mutable address : int; mutable size : int; mutable alive: bool }
+type cell = { mutable size : int; mutable alive: bool }
 
-let new_cell addr sz al = { address = addr; size = sz; alive = al }
+let new_cell sz al = { size = sz; alive = al }
+
+exception Found of int 
 
 let string_of_bool = function
   | true -> "true"
   | false -> "false"
 
-let string_of_cell c =
-  "address: "^(string_of_int c.address)^
-  ", size: "^(string_of_int c.size)^
-  ", alive: "^(string_of_bool c.alive)
-
-module CellSet = Set.Make(struct
-			    type t = cell
-			    let compare cx cy =
-			      Pervasives.compare cx.address cy.address
+module CellMap = Map.Make(struct
+			    type t = int
+			    let compare n m = (n-m)-(m-n)
 			  end)
 
 let array_create n =
@@ -48,8 +44,8 @@ class gc =
   let round n = align (n + 3) in
     fun verbose ->
 object(self)
-  val mutable alive_cells = CellSet.empty
-  val mutable dead_cells = CellSet.empty
+  val mutable alive_cells = CellMap.empty
+  val mutable dead_cells = CellMap.empty
   val stack = Stack.create ()
   val mutable hp_address = 0
   val mutable hp_size = 0
@@ -81,8 +77,8 @@ object(self)
 	  else (prerr_string "stack pointer = ";prerr_int sp);
 	  prerr_newline()
 	end;
-      alive_cells <- CellSet.empty;
-      dead_cells <- CellSet.singleton (new_cell hp_address hp_size false)
+      alive_cells <- CellMap.empty;
+      dead_cells <- CellMap.add hp_address (new_cell hp_size false) (CellMap.empty)
 (*
   method alloc sz emu =
     if (sz < 0) then failwith ("negative block size: "^(string_of_int sz));
@@ -95,30 +91,26 @@ object(self)
     if (sz < 0) then failwith ("negative block size: "^(string_of_int sz));
     let sz = max 4 (round sz) in
       match self#lock sz with
-	| Some(c) -> self#zero c emu; c.address
+	| Some(addr) -> addr
 	| None -> 
 	    begin
 	      self#free emu;
 	    match self#lock sz with
-	      | Some(c) -> self#zero c emu; c.address
+	      | Some(addr) -> addr
 	      | None -> failwith ("could not allocate block of "^(string_of_int sz)^" bytes")
 	    end
-  method private zero c emu =
-    for i = 0 to (c.size / 4) - 1 do
-      emu#writeWord (c.address+4*i) (Int32.zero)
-    done
   method private mark addr =
     try
-      let c = CellSet.find (new_cell addr 0 false) alive_cells in
+      let c = CellMap.find addr alive_cells in
 	if not (c.alive) then
 	  begin
 	    c.alive <- true;
-	    Stack.push c stack;
+	    Stack.push (addr,c) stack;
 	  end
     with Not_found -> ()
   method private free emu =
     let usage1 = ref 0 in
-      CellSet.iter (fun c ->
+      CellMap.iter (fun addr c ->
 		      c.alive <- false;
 		      usage1 := (!usage1) + c.size) alive_cells;
       let stk_address = 
@@ -143,21 +135,21 @@ object(self)
 	    i := (!i) + 4
 	  done;
 	  while not (Stack.is_empty stack) do
-	    let c = Stack.pop stack in
-	      i := c.address;
-	      while !i < c.address + c.size do
+	    let (address,c) = Stack.pop stack in
+	      i := address;
+	      while !i < address + c.size do
 		self#mark (Int32.to_int (emu#readWord (!i)));
 		i := (!i) + 4
 	      done
 	  done;
 	  let usage2 = ref 0 in
-	    CellSet.iter (fun c ->
+	    CellMap.iter (fun addr c ->
 			    if c.alive then
 			      usage2 := (!usage2) + c.size
 			    else
 			      begin
-				alive_cells <- CellSet.remove c alive_cells;
-				dead_cells <- CellSet.add c dead_cells
+				alive_cells <- CellMap.remove addr alive_cells;
+				self#add_dead addr c
 			      end)
 	      alive_cells;
 	    if verbose then
@@ -169,58 +161,44 @@ object(self)
 		prerr_string " bytes";
 		prerr_newline()
 	      end
+  method private add_dead addr c =
+    try
+      let addr' = addr + c.size in
+      let c' = CellMap.find addr' dead_cells in
+	c.size <- c.size + c'.size;
+	dead_cells <- CellMap.add addr c (CellMap.remove addr' dead_cells)
+    with Not_found ->
+      dead_cells <- CellMap.add addr c dead_cells
   method private lock sz =
-    let cell,last = CellSet.fold 
-		 (fun c (cell,last) ->
-		    match cell with
-		      | Some(_) -> cell,last
-		      | None ->
-			  let c = 
-			    match last with
-			      | Some(c') ->
-				  if c'.address + c'.size = c.address then
-				    begin
-				      dead_cells <- CellSet.remove c dead_cells;
-				      c'.size <- c'.size + c.size;
-				      c'
-				    end
-				  else c
-			      | None -> c
-			  in
-			    if c.size >= sz then
-			      let cell = 
-				if c.size = sz then
-				  begin
-				    c.alive <- false;
-				    dead_cells <- CellSet.remove c dead_cells;
-				    c
-				  end
-				else
-				  begin
-				    c.address <- c.address + sz;
-				    c.size <- c.size - sz;
-				    new_cell (c.address - sz) sz true
-				  end
-			      in
-				alive_cells <- CellSet.add cell alive_cells;
-				Some(cell),last
-			    else
-			      cell,Some(c))
-		      dead_cells (None,None) 
-    in
-      if verbose then
-	begin
-	  prerr_string "[GC]";
-	  (match cell with 
-	     | None -> 
-		 prerr_string "no cell allocated";
-	     | Some(c) ->
-		 prerr_string "cell allocated: ";
-		 prerr_string (string_of_cell c)
-	  );
-	  prerr_newline()
-	end;
-      cell
+    try
+      CellMap.iter (fun addr c ->
+		      if c.size >= sz then
+			if c.size = sz then
+			  begin
+			    c.alive <- false;
+			    dead_cells <- CellMap.remove addr dead_cells;
+			    alive_cells <- CellMap.add addr c alive_cells;
+			    raise (Found(addr))
+			  end
+			else
+			  begin
+			    c.size <- c.size - sz;
+			    dead_cells <- CellMap.add (addr+sz) c (CellMap.remove addr dead_cells);
+			    alive_cells <- CellMap.add addr (new_cell sz true) alive_cells;
+			    raise (Found(addr))
+			  end) dead_cells;
+      if verbose then prerr_string "[GC]no cell allocated\n";
+      None
+    with
+	Found(addr) -> 
+	  if verbose then
+	    begin
+	      prerr_string "[GC]";
+	      prerr_string "cell allocated: ";
+	      prerr_int addr;
+	      prerr_newline()
+	    end;
+	  Some(addr)
 end
 and emulator = 
   let create_memory mem_size = 
